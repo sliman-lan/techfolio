@@ -1,0 +1,108 @@
+{\rtf1\ansi\ansicpg1256\deff0
+{\fonttbl{\f0\fswiss Tahoma;}}
+\viewkind4\uc1\pard\f0\fs20\rtlpar
+\b ملخص المشروع والتوثيق (TechFolio)\b0\par
+\par
+**مقدمة**\par
+هذا المستند يوثق التعديلات والميزات التي تم تنفيذها حتى الآن في مشروع TechFolio (الواجهة الخلفية والواجهة الأمامية). الملف قابل للفتح والتعديل باستخدام Microsoft Word أو أي محرر مستندات يدعم RTF.\par
+\par
+**النطاق العام للعمل**\par
+- تهيئة وتوصيل خادم Express مع MongoDB.\par
+- إضافة نماذج Mongoose للمستخدمين والمشاريع.\par
+- إنشاء مسارات API للتوثيق، المستخدمين، والمشاريع.\par
+- إضافة مصادقة JWT وحماية المسارات.\par
+- دعم رفع ملفات صور المشاريع وحفظها على الخادم وعرضها في الواجهة الأمامية.\par
+- إضافة زر ومودال لإنشاء مشاريع من صفحة الملف الشخصي.\par
+- إضافة ميزة مشاركة المشروع مع خيارات متعددة (نسخ الرابط، تويتر، فيسبوك، لينكدإن، بريد إلكتروني، ومشاركة أصلية عند توفرها).\par
+\par
+**الملفات الرئيسية المعدلة / المضافة**\par
+- backend/src/server.js\par
+  - تهيئة Express، تحميل متغيرات البيئة، الاتصال بقاعدة البيانات، وتمكين \i /uploads \i0 كمسار ثابت لعرض الملفات المرفوعة.\par
+- backend/src/config/db.js\par
+  - دالة الاتصال بـ MongoDB باستخدام متغير البيئة \i MONGODB_URI \i0.\par
+- backend/src/models/User.js\par
+  - نموذج المستخدم مع حقول: name, email, password، role، avatar، bio، skills، certifications، socialLinks، isProfilePublic. ويتضمن تجزئة كلمة المرور قبل الحفظ.\par
+- backend/src/models/Project.js\par
+  - نموذج المشروع مع حقول: title, description, shortDescription, userId، category، tags، images (Array of URLs)، demoUrl، githubUrl، technologies، ratings، averageRating، totalRatings. ويتضمن دالة لحساب المتوسط بعد إضافة تقييم.\par
+- backend/src/middleware/auth.js\par
+  - وسيط حماية المسارات باستخدام JWT: \i protect \i0 و \i authorize \i0.\par
+- backend/src/routes/auth.js\par
+  - مسارات: POST /api/auth/register، POST /api/auth/login، GET /api/auth/me. يرجع token عند التسجيل/تسجيل الدخول.\par
+- backend/src/routes/users.js\par
+  - مسارات: GET /api/users (قوائم عامة)، GET /api/users/:id (عرض ملف مستخدم)، PUT /api/users/profile (تحديث الملف الشخصي، محمي بواسطة JWT)، وميزة البحث.\par
+- backend/src/routes/projects.js\par
+  - مسارات: GET /api/projects، GET /api/projects/:id، POST /api/projects، PUT /api/projects/:id، DELETE /api/projects/:id، POST /api/projects/:id/rate.\par
+  - أضيفت معالجة رفع ملفات الصور عبر \i multer \i0 وحفظ الملفات داخل \i backend/src/uploads \i0 مع تخزين روابط الوصول المطلقة في حقل \i images \i0 لكل مشروع.\par
+- backend/src/uploads/ (مجلد)\par
+  - المجلد الذي تحفظ فيه صور المشاريع المرفوعة.\par
+- frontend/src/services/api.js\par
+  - تهيئة axios instance مع إضافة Authorization header من localStorage. توفير APIs: \i authAPI \i0، \i usersAPI \i0، \i projectsAPI \i0 (معدل لإنشاء مشاريع عبر multipart/form-data).\par
+- frontend/src/context/AuthContext.js\par
+  - تحميل بيانات المستخدم عند التحميل باستخدام \i authAPI.getMe \i0، وعمليات login/register/logout التي تخزن الـ token في localStorage.\par
+- frontend/src/pages/Profile.js\par
+  - واجهة الملف الشخصي: إضافة زر "+ إضافة مشروع جديد" (مرئي في ملفك الشخصي)، مودال لإنشاء مشروع جديد يدعم رفع صور (يستخدم FormData وإرسال ملفات حقيقية إلى الـ API)، ومعاينات الصور قبل الرفع باستخدام \i URL.createObjectURL \i0.\par
+- frontend/src/pages/ProjectDetail.js\par
+  - عرض تفاصيل المشروع، أول صورة أو صورة افتراضية من \i /public/default-project.svg \i0، نظام تقييم للمستخدمين، وزر مشاركة يفتح مودال مشاركة مع خيارات متعددة.\par
+- frontend/public/default-project.svg\par
+  - صورة افتراضية تعرض عندما لا يضيف المستخدم أي صورة للمشروع.\par
+\par
+**كيف يتم رفع الصور ومعالجتها**\par
+- الواجهة الأمامية تجمع الملفات في \i FormData \i0 وتقوم بإرسالها إلى المسار \i POST /api/projects \i0.\par
+- الخادم يستخدم \i multer \i0 لتخزين الملفات داخل \i backend/src/uploads \i0 ويُنشئ روابط وصول كاملة (مثل \i http://localhost:5000/uploads/filename.jpg \i0) ويخزنها في \i project.images \i0.\par
+- ملاحظة: هذا الحل مناسب للتطوير والاختبار. للبيئات الإنتاجية يُنصح بتخزين الصور في خدمة تخزين سحابي (S3) وتقديمها عبر CDN.\par
+\par
+**تشغيل المشروع محلياً**\par
+1) تشغيل الواجهة الخلفية:
+\pard\li360\fi-360
+- افتح الطرفية، ثم:
+\par
+npm install\par
+npm run dev\par
+\pard\sa200
+(تأكد من وجود متغيرات البيئة في `.env` مثل `MONGODB_URI` و `JWT_SECRET` و `PORT` إذا رغبت).\par
+\par
+2) تشغيل الواجهة الأمامية:
+\pard\li360\fi-360
+- افتح طرفية ثانية داخل مجلد `frontend` ثم:
+\par
+npm install\par
+npm start\par
+\pard\sa200
+\par
+3) اختبار رفع صورة ومشاركة مشروع:
+\pard\li360\fi-360
+- سجّل دخول مستخدم أو أنشئ حسابا؛ توجه إلى الملف الشخصي؛ اضغط "+ إضافة مشروع جديد"، أضف عنواناً وصوراً، ثم أنشئ المشروع. افتح صفحة المشروع لتراه ويعمل زر المشاركة.\par
+\pard\sa200
+\par
+**ملاحظات تقنية واعتبارات لاحقة**\par
+- تحسين: إضافة فحص حجم وصيغة الصور قبل الرفع (client/server).\par
+- تحسين: استخدام مكتبة \i sharp \i0 على الخادم لتصغير الصور وإنشاء صور مصغرة وتوفير أداء أفضل.\par
+- تحسين أمني: تنظيف/حذف الملفات المرتبطة بالمشاريع المحذوفة (حذف من القرص).\par
+- إنتاج: استخدام تخزين سحابي (S3) مع سياسات صلاحية ومراقبة التكلفة.\par
+- اختبار: إضافة اختبارات وحدية/تكاملية لمسارات API الأساسية.\par
+\par
+**قائمة سريعة للملفات (مختصر)**\par
+- backend/src/server.js\par
+- backend/src/config/db.js\par
+- backend/src/models/User.js\par
+- backend/src/models/Project.js\par
+- backend/src/middleware/auth.js\par
+- backend/src/routes/auth.js\par
+- backend/src/routes/users.js\par
+- backend/src/routes/projects.js\par
+- backend/src/uploads/ (مجلد)\par
+- frontend/src/services/api.js\par
+- frontend/src/context/AuthContext.js\par
+- frontend/src/pages/Profile.js\par
+- frontend/src/pages/ProjectDetail.js\par
+- frontend/public/default-project.svg\par
+\par
+**تواصل وطلبات إضافية**\par
+إذا رغبت أستطيع الآن:
+- تحويل هذا الملف إلى صيغة DOCX حقيقية (ZIP chứa XML) ورفعه هنا، أو
+- إضافة فحص/توليف الصور (صغير، تنسيق) قبل الرفع، أو
+- إضافة حذف الصور من الخادم عند حذف المشروع، أو
+- إضافة اختبارات ومسارات API مفصلة في Postman collection.
+
+\par
+}

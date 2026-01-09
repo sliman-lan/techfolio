@@ -1,0 +1,125 @@
+{
+  "info": {
+    "name": "TechFolio API",
+    "_postman_id": "techfolio-collection-001",
+    "description": "Postman collection for TechFolio API (local)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"demo@example.com\",\n  \"password\": \"password123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api","auth","register"] }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@example.com\",\n  \"password\": \"password123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api","auth","login"] }
+          }
+        },
+        {
+          "name": "Get current user",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api","auth","me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List public users",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users", "host": ["{{baseUrl}}"], "path": ["api","users"] }
+          }
+        },
+        {
+          "name": "Get user by id",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/users/:id", "host": ["{{baseUrl}}"], "path": ["api","users",":id"] } }
+        },
+        {
+          "name": "Update profile (authenticated)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Name\",\n  \"bio\": \"Short bio\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/users/profile", "host": ["{{baseUrl}}"], "path": ["api","users","profile"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "List projects",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/projects", "host": ["{{baseUrl}}"], "path": ["api","projects"] } }
+        },
+        {
+          "name": "Get project",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/projects/:id", "host": ["{{baseUrl}}"], "path": ["api","projects",":id"] } }
+        },
+        {
+          "name": "Create project (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "My Project", "type": "text" },
+                { "key": "shortDescription", "value": "Short desc", "type": "text" },
+                { "key": "description", "value": "Long description here", "type": "text" },
+                { "key": "category", "value": "web", "type": "text" },
+                { "key": "demoUrl", "value": "https://example.com", "type": "text" },
+                { "key": "githubUrl", "value": "https://github.com/your/repo", "type": "text" },
+                { "key": "images", "type": "file", "src": "" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/api/projects", "host": ["{{baseUrl}}"], "path": ["api","projects"] }
+          }
+        },
+        {
+          "name": "Update project (multipart)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": { "mode": "formdata", "formdata": [ { "key": "title", "value": "Updated title", "type": "text" }, { "key": "images", "type": "file", "src": "" } ] },
+            "url": { "raw": "{{baseUrl}}/api/projects/:id", "host": ["{{baseUrl}}"], "path": ["api","projects",":id"] }
+          }
+        },
+        {
+          "name": "Delete project",
+          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": { "raw": "{{baseUrl}}/api/projects/:id", "host": ["{{baseUrl}}"], "path": ["api","projects",":id"] } }
+        },
+        {
+          "name": "Rate project",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"value\": 5,\n  \"comment\": \"Great project!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/projects/:id/rate", "host": ["{{baseUrl}}"], "path": ["api","projects",":id","rate"] }
+          }
+        }
+      ]
+    }
+  ]
+}
