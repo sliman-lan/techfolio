@@ -38,3 +38,7 @@ yarn-error.log*
 *.docx
 *.doc
 *.rtf
+node_modules
+frontend/node_modules
+backend/node_modules
+mobile/node_modules
