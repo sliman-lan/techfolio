@@ -54,9 +54,13 @@ const commentAPI = {
 
     toggleLike: (commentId) => {
         const token = localStorage.getItem("authToken");
-        return api.post(`/comments/${commentId}/like`, {}, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+        return api.post(
+            `/comments/${commentId}/like`,
+            {},
+            {
+                headers: { Authorization: `Bearer ${token}` },
+            },
+        );
     },
 };
 

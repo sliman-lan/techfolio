@@ -99,7 +99,10 @@ const getProjectComments = async (req, res) => {
         // الحصول على التعليقات الرئيسية فقط
         const comments = await Comment.find({
             projectId,
-            $or: [{ parentComment: { $exists: false } }, { parentComment: null }],
+            $or: [
+                { parentComment: { $exists: false } },
+                { parentComment: null },
+            ],
         })
             .populate("userId", "name avatar")
             .sort({ createdAt: -1 })
@@ -141,7 +144,10 @@ const getProjectComments = async (req, res) => {
 
         const total = await Comment.countDocuments({
             projectId,
-            $or: [{ parentComment: { $exists: false } }, { parentComment: null }],
+            $or: [
+                { parentComment: { $exists: false } },
+                { parentComment: null },
+            ],
         });
 
         res.json({
