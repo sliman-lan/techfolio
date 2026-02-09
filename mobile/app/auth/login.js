@@ -8,42 +8,148 @@ import {
     StyleSheet,
     ScrollView,
     Alert,
+    ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { authAPI } from "../../src/services/api";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { authAPI } from "../../src/services/api";
 
 export default function Login() {
     const router = useRouter();
-
-    // الحقول
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-
-    // حالات التحميل والأخطاء
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
     const [generalError, setGeneralError] = useState("");
 
-    // معالجة تسجيل الدخول
+    // const handleLogin = async () => {
+    //     // التحقق من صحة البيانات
+    //     const newErrors = {};
+    //     if (!email.trim()) newErrors.email = "البريد الإلكتروني مطلوب";
+    //     else if (!/\S+@\S+\.\S+/.test(email))
+    //         newErrors.email = "صيغة البريد الإلكتروني غير صحيحة";
+    //     if (!password.trim()) newErrors.password = "كلمة المرور مطلوبة";
+
+    //     if (Object.keys(newErrors).length > 0) {
+    //         setErrors(newErrors);
+    //         return;
+    //     }
+
+    //     setLoading(true);
+    //     setErrors({});
+    //     setGeneralError("");
+
+    //     try {
+    //         console.log("🔄 جاري تسجيل الدخول...", { email });
+    //         const response = await authAPI.login({ email, password });
+
+    //         console.log("🔍 تحليل الاستجابة:", {
+    //             هيكل_الاستجابة: Object.keys(response.data),
+    //             هل_يوجد_success: !!response.data.success,
+    //             هل_يوجد_data: !!response.data.data,
+    //             محتوى_data: response.data.data
+    //                 ? Object.keys(response.data.data)
+    //                 : "غير موجود",
+    //             هل_يوجد_token_في_data: !!response.data.data?.token,
+    //             هل_يوجد_token_في_المستوى_الرئيسي: !!response.data.token,
+    //         });
+
+    //         // 🔑 الحل: البحث عن التوكن في جميع الأماكن الممكنة
+    //         let token = null;
+    //         let userData = {};
+
+    //         // البحث في جميع المواقع الممكنة للتوكن
+    //         const possibleTokenLocations = [
+    //             response.data.data?.token, // { success, data: { token } }
+    //             response.data.token, // { token }
+    //             response.data.data?.accessToken, // { success, data: { accessToken } }
+    //             response.data.accessToken, // { accessToken }
+    //             response.data.jwt, // { jwt }
+    //             response.headers?.["authorization"]?.replace("Bearer ", ""),
+    //             response.headers?.["x-auth-token"],
+    //         ];
+
+    //         token = possibleTokenLocations.find(
+    //             (t) => t && typeof t === "string" && t.length > 20,
+    //         );
+
+    //         // استخراج بيانات المستخدم
+    //         if (response.data.data && response.data.data._id) {
+    //             userData = {
+    //                 _id: response.data.data._id,
+    //                 name: response.data.data.name || "",
+    //                 email: response.data.data.email || "",
+    //                 role: response.data.data.role || "student",
+    //             };
+    //         } else if (response.data._id) {
+    //             userData = {
+    //                 _id: response.data._id,
+    //                 name: response.data.name || "",
+    //                 email: response.data.email || "",
+    //                 role: response.data.role || "student",
+    //             };
+    //         }
+
+    //         // التحقق من وجود التوكن
+    //         if (!token) {
+    //             console.error("❌ خطأ حرج: التوكن مفقود تماماً في الاستجابة!");
+    //             console.error(
+    //                 "💡 الحل الفوري: تأكد من وجود هذا السطر في backend/routes/auth.js:",
+    //             );
+    //             console.error(
+    //                 "   token: generateToken(user._id), // داخل كائن data",
+    //             );
+
+    //             throw new Error(
+    //                 "الخادم لم يُرجع رمز المصادقة. يرجى مراجعة كود الـ Backend في ملف auth.js",
+    //             );
+    //         }
+
+    //         // 🔑 حفظ البيانات بشكل صحيح
+    //         await AsyncStorage.setItem("authToken", token);
+    //         await AsyncStorage.setItem("user", JSON.stringify(userData));
+
+    //         console.log("✅ تم تسجيل الدخول بنجاح");
+    //         console.log("👤 المستخدم:", userData);
+    //         console.log("🔑 التوكن (20 حرف):", token.substring(0, 20) + "...");
+
+    //         // التوجيه إلى الصفحة الرئيسية
+    //         router.replace("/tabs");
+    //     } catch (error) {
+    //         console.error("❌ خطأ في تسجيل الدخول:", {
+    //             رسالة: error.message,
+    //             تفاصيل: error.response?.data || error.config?.url,
+    //         });
+
+    //         let errorMessage = "حدث خطأ أثناء تسجيل الدخول";
+
+    //         if (error.response) {
+    //             if (error.response.status === 401) {
+    //                 errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة";
+    //             } else if (error.response.status === 400) {
+    //                 errorMessage =
+    //                     error.response.data?.message || "بيانات غير صحيحة";
+    //             } else if (error.response.status === 500) {
+    //                 errorMessage = "خطأ في الخادم. يرجى المحاولة لاحقاً";
+    //             } else {
+    //                 errorMessage =
+    //                     error.response.data?.message || "خطأ غير متوقع";
+    //             }
+    //         } else if (error.request) {
+    //             errorMessage = "تعذر الاتصال بالخادم. تحقق من اتصال الإنترنت";
+    //         }
+
+    //         setGeneralError(errorMessage);
+    //         Alert.alert("خطأ في تسجيل الدخول", errorMessage);
+    //     } finally {
+    //         setLoading(false);
+    //     }
+    // };
+
+    // استبدل الكود المعقد في handleLogin بـ:
     const handleLogin = async () => {
-        // التحقق من صحة البيانات أولاً
-        const newErrors = {};
-
-        if (!email.trim()) {
-            newErrors.email = "البريد الإلكتروني مطلوب";
-        } else if (!/\S+@\S+\.\S+/.test(email)) {
-            newErrors.email = "صيغة البريد الإلكتروني غير صحيحة";
-        }
-
-        if (!password) {
-            newErrors.password = "كلمة المرور مطلوبة";
-        }
-
-        if (Object.keys(newErrors).length > 0) {
-            setErrors(newErrors);
-            return;
-        }
+        // ... التحقق من الصحة
 
         setLoading(true);
         setErrors({});
@@ -52,67 +158,18 @@ export default function Login() {
         try {
             console.log("🔄 جاري تسجيل الدخول...", { email });
 
-            const response = await authAPI.login({ email, password });
+            // استخدم authAPI.login الجديدة
+            const result = await authAPI.login({ email, password });
 
-            console.log(
-                "✅ تسجيل الدخول ناجح، الرد الكامل:",
-                JSON.stringify(response.data, null, 2),
-            );
+            console.log("✅ تسجيل الدخول ناجح:", {
+                userId: result.data._id,
+                tokenLength: result.token?.length,
+            });
 
-            // 🔥 التصحيح: التوكن موجود في response.data.data وليس response.data مباشرة
-            // في login.js - جزء من دالة handleLogin
-            if (response.data.success && response.data.data?.token) {
-                const token = response.data.data.token;
-                const user =
-                    response.data.data.user || response.data.data || {};
-
-                console.log(
-                    "🔑 التوكن المستلم:",
-                    token.substring(0, 20) + "...",
-                );
-                console.log("👤 بيانات المستخدم:", user);
-
-                // 🔥 حفظ البيانات المهمة
-                await AsyncStorage.setItem("authToken", token);
-                await AsyncStorage.setItem("user", JSON.stringify(user));
-                await AsyncStorage.setItem(
-                    "user_id",
-                    user.id || user._id || "",
-                );
-                await AsyncStorage.setItem("user_email", user.email || "");
-                await AsyncStorage.setItem(
-                    "user_name",
-                    user.name || user.username || "",
-                );
-
-                // التحقق من الحفظ
-                const savedUser = await AsyncStorage.getItem("user");
-                console.log("💾 المستخدم المحفوظ:", savedUser);
-
-                // التوجيه إلى الصفحة الرئيسية
-                router.replace("/tabs/home");
-            } else {
-                console.error("❌ بنية الرد غير متوقعة:", response.data);
-                setGeneralError("بنية البيانات غير صحيحة من الخادم");
-
-                // 🔥 عرض بنية الرد للتصحيح
-                Alert.alert(
-                    "تنبيه",
-                    `الخادم أرسل: ${JSON.stringify(response.data, null, 2)}`,
-                    [{ text: "حسناً" }],
-                );
-            }
+            // التوجيه إلى الصفحة الرئيسية
+            router.replace("/tabs");
         } catch (error) {
-            console.error("❌ خطأ في تسجيل الدخول:", error);
-
-            // 🔥 تسجيل تفاصيل الخطأ
-            if (error.response) {
-                console.error("🔴 تفاصيل الخطأ:", {
-                    status: error.response.status,
-                    data: error.response.data,
-                    headers: error.response.headers,
-                });
-            }
+            console.error("❌ خطأ في تسجيل الدخول:", error.message);
 
             let errorMessage = "حدث خطأ أثناء تسجيل الدخول";
 
@@ -120,22 +177,20 @@ export default function Login() {
                 if (error.response.status === 401) {
                     errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة";
                 } else if (error.response.status === 400) {
-                    errorMessage = "بيانات غير صحيحة";
-                } else {
                     errorMessage =
-                        error.response.data?.message || "خطأ في الخادم";
+                        error.response.data?.message || "بيانات غير صحيحة";
                 }
             } else if (error.request) {
-                errorMessage = "تعذر الاتصال بالخادم";
+                errorMessage = "تعذر الاتصال بالخادم. تحقق من اتصال الإنترنت";
             }
 
             setGeneralError(errorMessage);
+            Alert.alert("خطأ في تسجيل الدخول", errorMessage);
         } finally {
             setLoading(false);
         }
     };
 
-    // إدخال بيانات تجريبية
     const useTestCredentials = () => {
         setEmail("test@test.com");
         setPassword("123456");
@@ -146,7 +201,6 @@ export default function Login() {
     return (
         <ScrollView contentContainerStyle={styles.scrollContainer}>
             <View style={styles.container}>
-                {/* العنوان */}
                 <View style={styles.header}>
                     <Text style={styles.title}>تسجيل الدخول</Text>
                     <Text style={styles.subtitle}>
@@ -154,16 +208,19 @@ export default function Login() {
                     </Text>
                 </View>
 
-                {/* رسالة الخطأ العامة */}
                 {generalError ? (
                     <View style={styles.generalErrorContainer}>
+                        <Ionicons
+                            name="alert-circle"
+                            size={20}
+                            color="#FF3B30"
+                        />
                         <Text style={styles.generalErrorText}>
                             {generalError}
                         </Text>
                     </View>
                 ) : null}
 
-                {/* حقل البريد الإلكتروني */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>البريد الإلكتروني</Text>
                     <TextInput
@@ -184,12 +241,16 @@ export default function Login() {
                     />
                     {errors.email ? (
                         <View style={styles.errorContainer}>
+                            <Ionicons
+                                name="warning"
+                                size={14}
+                                color="#FF3B30"
+                            />
                             <Text style={styles.errorText}>{errors.email}</Text>
                         </View>
                     ) : null}
                 </View>
 
-                {/* حقل كلمة المرور */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>كلمة المرور</Text>
                     <TextInput
@@ -209,6 +270,11 @@ export default function Login() {
                     />
                     {errors.password ? (
                         <View style={styles.errorContainer}>
+                            <Ionicons
+                                name="warning"
+                                size={14}
+                                color="#FF3B30"
+                            />
                             <Text style={styles.errorText}>
                                 {errors.password}
                             </Text>
@@ -216,7 +282,6 @@ export default function Login() {
                     ) : null}
                 </View>
 
-                {/* زر تسجيل الدخول */}
                 <TouchableOpacity
                     style={[
                         styles.loginButton,
@@ -225,12 +290,13 @@ export default function Login() {
                     onPress={handleLogin}
                     disabled={loading}
                 >
-                    <Text style={styles.loginButtonText}>
-                        {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
-                    </Text>
+                    {loading ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.loginButtonText}>تسجيل الدخول</Text>
+                    )}
                 </TouchableOpacity>
 
-                {/* زر البيانات التجريبية (للتطوير) */}
                 <TouchableOpacity
                     style={styles.testButton}
                     onPress={useTestCredentials}
@@ -241,7 +307,6 @@ export default function Login() {
                     </Text>
                 </TouchableOpacity>
 
-                {/* روابط إضافية */}
                 <View style={styles.linksContainer}>
                     <TouchableOpacity
                         onPress={() => router.push("/auth/forgot-password")}
@@ -259,18 +324,6 @@ export default function Login() {
                             </Text>
                         </TouchableOpacity>
                     </View>
-                </View>
-
-                {/* تلميحات للمستخدم */}
-                <View style={styles.tipsContainer}>
-                    <Text style={styles.tipsTitle}>تلميحات:</Text>
-                    <Text style={styles.tip}>
-                        • تأكد من صحة البريد الإلكتروني
-                    </Text>
-                    <Text style={styles.tip}>• تأكد من صحة كلمة المرور</Text>
-                    <Text style={styles.tip}>
-                        • إذا نسيت كلمة المرور، يمكنك استعادتها
-                    </Text>
                 </View>
             </View>
         </ScrollView>
@@ -309,11 +362,14 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         borderWidth: 1,
         borderColor: "#FF3B30",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
     },
     generalErrorText: {
         color: "#FF3B30",
         fontSize: 14,
-        textAlign: "center",
+        flex: 1,
     },
     inputGroup: {
         marginBottom: 20,
@@ -340,11 +396,11 @@ const styles = StyleSheet.create({
         marginTop: 5,
         flexDirection: "row",
         alignItems: "center",
+        gap: 5,
     },
     errorText: {
         color: "#FF3B30",
         fontSize: 14,
-        marginLeft: 5,
     },
     loginButton: {
         backgroundColor: "#007AFF",
@@ -396,23 +452,5 @@ const styles = StyleSheet.create({
         color: "#007AFF",
         fontSize: 16,
         fontWeight: "600",
-    },
-    tipsContainer: {
-        backgroundColor: "#F2F2F7",
-        padding: 20,
-        borderRadius: 12,
-        marginTop: 10,
-    },
-    tipsTitle: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#1D1D1F",
-        marginBottom: 10,
-    },
-    tip: {
-        fontSize: 14,
-        color: "#666",
-        marginBottom: 5,
-        lineHeight: 22,
     },
 });

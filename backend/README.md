@@ -1,53 +1,62 @@
-# TechFolio — Backend
+## TechFolio — Backend (وثائق التشغيل السريعة)
 
-Lightweight Express + MongoDB API for TechFolio.
+واجهة برمجية مبنية بـ Express و MongoDB. تُدير المستخدمين، المشاريع، التعليقات، والمتابعات.
 
-## Quick start
+### المتطلبات
 
-1. Copy `.env.example` to `.env` (or create `.env`) and set values:
+- Node.js
+- npm
+- MongoDB
+
+### تثبيت وتشغيل (محلي)
+
+1. انسخ `.env.example` إلى `.env` أو أنشئ `.env` في مجلد `backend/` ثم عدل القيم:
 
 ```
-MONGODB_URI=mongodb://localhost:27017/techfolio
+MONGODB_URI=mongodb://127.0.0.1:27017/techfolio
 JWT_SECRET=your_jwt_secret
 PORT=5000
 ```
 
-2. Install dependencies and run server:
+2. تثبيت الاعتماديات وتشغيل السيرفر:
 
 ```bash
 cd backend
 npm install
-npm run dev    # uses nodemon
+# تشغيل التطوير مع nodemon
+npm run dev
+# أو تشغيل الإنتاج
+npm start
 ```
 
-3. API base URL:
+### نقطــة النهاية الأساسية (ملخص)
 
-- Development: `http://localhost:5000/api`
+- `POST /api/auth/register` — تسجيل حساب جديد. body: `{ name, email, password }`.
+- `POST /api/auth/login` — تسجيل الدخول. body: `{ email, password }`. تعيد `token` وبيانات المستخدم.
+- `GET /api/auth/me` — جلب بيانات المستخدم الحالي (محمي).
+- `PUT /api/users/profile` — تحديث بروفايل المستخدم الحالي (محمي).
+- `GET /api/users/:id` — جلب ملف مستخدم عام.
 
-## Important endpoints
+- `GET /api/projects` — جلب المشاريع. يدعم فلترة بـ `?userId=` وغيرها.
+- `GET /api/projects/:id` — تفاصيل مشروع.
+- `POST /api/projects` — إنشاء مشروع (multipart/form-data ـ الحقل `images`).
+- `POST /api/projects/:projectId/like` — إعجاب بمشروع.
+- `DELETE /api/projects/:projectId/like` — إلغاء إعجاب.
 
-- `POST /api/auth/register` — register (body: name, email, password)
-- `POST /api/auth/login` — login (body: email, password)
-- `GET /api/auth/me` — current user (Authorization: Bearer <token>)
-- `GET /api/users` — list public users
-- `GET /api/users/:id` — get user profile
-- `PUT /api/users/profile` — update own profile (protected)
-- `GET /api/projects` — list public projects
-- `GET /api/projects/:id` — project detail
-- `POST /api/projects` — create project (protected, multipart/form-data, field `images` for files)
-- `PUT /api/projects/:id` — update project (protected, supports additional images)
-- `DELETE /api/projects/:id` — delete project (protected)
-- `POST /api/projects/:id/rate` — add rating (protected)
+للاطلاع على أمثلة جاهزة، استورد `postman_collection.json` في Postman واضبط `{{baseUrl}}` إلى `http://localhost:5000/api` ثم نفّذ طلبات المصادقة أولاً للحصول على التوكن.
 
-## Uploads
+### تحميل الملفات
 
-- Uploaded images are stored under `backend/src/uploads` and served at `/uploads` (e.g. `http://localhost:5000/uploads/<filename>`).
+الصور تُحفظ محليًا في `backend/uploads` وتُخدم عبر المسار `/uploads/<filename>`.
 
-## Notes & Next steps
+### ملاحظات للنشر
 
-- For production, consider moving image storage to cloud (S3) and using a CDN. Add image validation and resizing (e.g. `sharp`).
-- See `postman_collection.json` at the repository root for example API calls.
+- فكر في نقل تخزين الصور إلى خدمة سحابية (S3) وتفعيل CDN.
+- أضف فحصاً لحجم ونوع الصور ومعالجة (مثل `sharp`) قبل الحفظ.
 
-## Troubleshooting
+### مشاكل شائعة
 
-- If `npm install` fails for a package version, ensure your `npm` registry is `https://registry.npmjs.org/` and try `npm cache clean --force`.
+- إذا ظهرت أخطاء تتعلق بالاتصال بقاعدة البيانات، راجع قيمة `MONGODB_URI` وتأكد أن MongoDB تعمل.
+- عند استجابة 401 تأكد من إرسال `Authorization: Bearer <token>`.
+
+---

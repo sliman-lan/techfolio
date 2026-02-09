@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { authAPI } from "../services/api";
+import { authAPI, usersAPI } from "../services/api";
 import { router } from "expo-router";
 
 const AuthContext = createContext({});
@@ -12,84 +12,81 @@ export const AuthProvider = ({ children }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-    // تحقق من المصادقة عند فتح التطبيق
-    useEffect(() => {
-        checkExistingAuth();
-    }, []);
-
-    const checkExistingAuth = async () => {
+    const clearLocalAuth = async () => {
         try {
-            console.log("🔍 Checking existing auth...");
-            const token = await AsyncStorage.getItem("token");
-            const userStr = await AsyncStorage.getItem("user");
-
-            console.log("📊 Stored token:", !!token);
-            console.log("📊 Stored user:", !!userStr);
-
-            if (token && userStr) {
-                try {
-                    // تحقق من صلاحية التوكن
-                    const response = await authAPI.getProfile();
-                    setUser(JSON.parse(userStr));
-                    console.log("✅ User authenticated from storage");
-                } catch (error) {
-                    console.log("❌ Token invalid, clearing storage");
-                    await clearStorage();
-                }
-            } else {
-                console.log("⚠️ No stored auth found");
-            }
-        } catch (error) {
-            console.error("Error checking auth:", error);
-        } finally {
-            setIsCheckingAuth(false);
+            await AsyncStorage.removeItem("authToken");
+            await AsyncStorage.removeItem("user");
+        } catch (e) {
+            console.warn("clearLocalAuth failed:", e);
         }
-    };
-
-    const clearStorage = async () => {
-        await AsyncStorage.removeItem("token");
-        await AsyncStorage.removeItem("user");
         setUser(null);
     };
 
+    const initAuth = async () => {
+        setIsCheckingAuth(true);
+        try {
+            const token = await AsyncStorage.getItem("authToken");
+            if (!token) {
+                await clearLocalAuth();
+                setIsCheckingAuth(false);
+                return;
+            }
+
+            try {
+                const profileRes = await usersAPI.getProfile();
+                const serverUser = profileRes?.data || profileRes;
+                if (serverUser) {
+                    setUser(serverUser);
+                    await AsyncStorage.setItem("user", JSON.stringify(serverUser));
+                    try {
+                        if (typeof window !== "undefined" && window.localStorage) {
+                            localStorage.setItem("user", JSON.stringify(serverUser));
+                        }
+                    } catch (e) {}
+                    setIsCheckingAuth(false);
+                    return;
+                }
+            } catch (e) {
+                console.warn("initAuth: /auth/me failed:", e?.message || e);
+                // fallback: keep local stored user if available so bio still shows
+                try {
+                    const userStr = await AsyncStorage.getItem("user");
+                    if (userStr) {
+                        setUser(JSON.parse(userStr));
+                        setIsCheckingAuth(false);
+                        return;
+                    }
+                } catch (readErr) {
+                    console.warn("initAuth fallback read failed:", readErr);
+                }
+                await clearLocalAuth();
+            }
+        } catch (e) {
+            console.error("initAuth unexpected error:", e);
+            await clearLocalAuth();
+        }
+        setIsCheckingAuth(false);
+    };
+
+    useEffect(() => {
+        initAuth();
+    }, []);
+
     const login = async (email, password) => {
         setIsLoading(true);
-        console.log("🔑 Attempting login...");
-
         try {
-            const response = await authAPI.login({ email, password });
-
-            if (response.data.token) {
-                // تحقق من حفظ التوكن
-                const token = await AsyncStorage.getItem("token");
-                const user = await AsyncStorage.getItem("user");
-
-                if (token) {
-                    console.log("✅ Login successful, token saved");
-                    setUser(response.data.user);
-                    return { success: true, user: response.data.user };
-                } else {
-                    console.log("❌ Token not saved after login");
-                    return { success: false, error: "Failed to save token" };
-                }
-            } else {
-                console.log("❌ No token in response");
-                return {
-                    success: false,
-                    error: "Invalid response from server",
-                };
+            const res = await authAPI.login({ email, password });
+            if (res?.success && res?.data) {
+                setUser(res.data);
+                try {
+                    await AsyncStorage.setItem("user", JSON.stringify(res.data));
+                } catch (e) {}
+                return { success: true, user: res.data };
             }
+            return { success: false, error: "Invalid server response" };
         } catch (error) {
-            console.error("Login error:", error);
-
-            let errorMessage = "فشل تسجيل الدخول";
-            if (error.response?.status === 401) {
-                errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة";
-            } else if (error.response?.status === 404) {
-                errorMessage = "لا يمكن الاتصال بالخادم";
-            }
-
-            return { success: false, error: errorMessage };
+            console.error("login error:", error);
+            return { success: false, error };
         } finally {
             setIsLoading(false);
         }
@@ -97,47 +94,45 @@ export const AuthProvider = ({ children }) => {
 
     const register = async (userData) => {
         setIsLoading(true);
-        console.log("📝 Attempting registration...");
-
         try {
-            const response = await authAPI.register(userData);
-
-            if (response.data.token) {
-                const token = await AsyncStorage.getItem("token");
-                if (token) {
-                    console.log("✅ Registration successful");
-                    setUser(response.data.user);
-                    return { success: true, user: response.data.user };
-                } else {
-                    return { success: false, error: "Failed to save token" };
-                }
-            } else {
-                return {
-                    success: false,
-                    error: "Invalid response from server",
-                };
+            const res = await authAPI.register(userData);
+            if (res?.success && res?.data) {
+                setUser(res.data);
+                try {
+                    await AsyncStorage.setItem("user", JSON.stringify(res.data));
+                } catch (e) {}
+                return { success: true, user: res.data };
             }
+            return { success: false, error: "Invalid server response" };
         } catch (error) {
-            console.error("Registration error:", error);
-
-            let errorMessage = "فشل إنشاء الحساب";
-            if (error.response?.status === 400) {
-                errorMessage = "البريد الإلكتروني مستخدم بالفعل";
-            }
-
-            return { success: false, error: errorMessage };
+            console.error("register error:", error);
+            return { success: false, error };
         } finally {
             setIsLoading(false);
         }
     };
 
     const logout = async () => {
-        await clearStorage();
-        router.replace("/auth/login");
+        console.log("logout: start");
+        setIsLoading(true);
+        try {
+            await authAPI.logout();
+            console.log("authAPI.logout cleared storage");
+        } catch (e) {
+            console.warn("authAPI.logout error:", e);
+        }
+        await clearLocalAuth();
+        try {
+            router.replace("/auth/login");
+        } catch (e) {
+            console.warn("router.replace failed:", e);
+        }
+        setIsLoading(false);
+        console.log("logout: done");
     };
 
     const checkAuthStatus = async () => {
-        const token = await AsyncStorage.getItem("token");
+        const token = await AsyncStorage.getItem("authToken");
         return { isAuthenticated: !!token, token };
     };
 
@@ -145,6 +140,7 @@ export const AuthProvider = ({ children }) => {
         <AuthContext.Provider
             value={{
                 user,
+                setUser,
                 isLoading,
                 isCheckingAuth,
                 login,

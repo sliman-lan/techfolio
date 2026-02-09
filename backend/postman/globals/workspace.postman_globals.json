@@ -1,0 +1,16 @@
+{
+  "id": "d144b41f-f6e6-4ab4-9c88-525dd92b7cac",
+  "name": "Globals",
+  "values": [
+    {
+      "key": "jwt_token",
+      "value": "",
+      "enabled": true,
+      "type": "default",
+      "description": ""
+    }
+  ],
+  "_postman_variable_scope": "globals",
+  "_postman_exported_at": "2026-02-08T21:23:23.933Z",
+  "_postman_exported_using": "Postman/11.0.0"
+}

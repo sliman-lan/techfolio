@@ -24,6 +24,9 @@ app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api/projects", require("./routes/projects"));
+// like routes (project likes) - mounted under /api/projects so endpoints become
+// POST /api/projects/:projectId/like, DELETE /api/projects/:projectId/like, GET /api/projects/:projectId/like/status
+app.use("/api/projects", require("./routes/like"));
 app.use("/api/follow", require("./routes/follow"));
 app.use("/api/comments", require("./routes/comment"));
 app.use("/api/notifications", require("./routes/notification"));

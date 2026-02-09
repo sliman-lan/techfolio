@@ -26,6 +26,7 @@ const login = async (req, res) => {
                 id: user._id.toString(),
                 email: user.email,
                 name: user.name,
+                role: user.role, // include role so middleware and controllers can check admin
             },
             process.env.JWT_SECRET,
             {
@@ -48,6 +49,7 @@ const login = async (req, res) => {
                     id: user._id,
                     name: user.name,
                     email: user.email,
+                    role: user.role,
                 },
             },
         });

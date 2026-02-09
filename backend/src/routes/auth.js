@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { protect } = require("../middleware/auth");
 
 // توليد JWT Token
 const generateToken = (id) => {
@@ -34,6 +35,8 @@ router.post("/register", async (req, res) => {
         });
 
         if (user) {
+            const token = generateToken(user._id);
+            console.log("🔑 Issued token (register):", token);
             res.status(201).json({
                 success: true,
                 data: {
@@ -41,7 +44,7 @@ router.post("/register", async (req, res) => {
                     name: user.name,
                     email: user.email,
                     role: user.role,
-                    token: generateToken(user._id),
+                    token,
                 },
             });
         }
@@ -80,6 +83,8 @@ router.post("/login", async (req, res) => {
             });
         }
 
+        const token = generateToken(user._id);
+        console.log("🔑 Issued token (login):", token);
         res.json({
             success: true,
             data: {
@@ -87,7 +92,7 @@ router.post("/login", async (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                token: generateToken(user._id),
+                token,
             },
         });
     } catch (error) {
@@ -168,6 +173,47 @@ router.get("/verify-token", (req, res) => {
             message: "التوكن غير صالح",
             error: error.message,
         });
+    }
+});
+
+// @route   POST /api/auth/change-password
+// @desc    تغيير كلمة المرور للمستخدم الحالي
+// @access  Private
+router.post("/change-password", protect, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: "مطلوب: currentPassword و newPassword",
+            });
+        }
+
+        const user = await User.findById(req.user._id);
+        if (!user) {
+            return res
+                .status(404)
+                .json({ success: false, message: "المستخدم غير موجود" });
+        }
+
+        const isMatch = await user.comparePassword(currentPassword);
+        if (!isMatch) {
+            return res
+                .status(401)
+                .json({
+                    success: false,
+                    message: "كلمة المرور الحالية غير صحيحة",
+                });
+        }
+
+        user.password = newPassword;
+        await user.save();
+
+        res.json({ success: true, message: "تم تغيير كلمة المرور بنجاح" });
+    } catch (error) {
+        console.error("Error in POST /api/auth/change-password:", error);
+        res.status(500).json({ success: false, message: "حدث خطأ في الخادم" });
     }
 });
 module.exports = router;

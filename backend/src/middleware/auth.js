@@ -73,10 +73,13 @@ const protect = async (req, res, next) => {
             });
 
             // 5. إضافة المستخدم إلى الطلب
+            // Ensure controllers can use `req.user._id` (common in codebase)
             req.user = {
-                id: decoded.id,
+                _id: decoded.id || decoded._id,
+                id: decoded.id || decoded._id,
                 email: decoded.email,
                 name: decoded.name,
+                role: decoded.role || decoded?.role,
             };
 
             next();

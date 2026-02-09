@@ -1,0 +1,197 @@
+{
+  "info": {
+    "_postman_id": "11ddd694-e37c-45ff-89a8-2fa75f9e8aba",
+    "name": "New Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "API Test",
+      "id": "b9f5d249-bb8b-496e-a07a-10c389b7f402",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Projects",
+      "id": "119ccb70-873b-412d-aabb-ff540c5b1392",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Users",
+      "id": "b15444f7-5c03-49cd-9e21-7c7dea103b43",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "get project by ID",
+      "id": "54264dd2-8e9e-4440-8fa6-88b6be0b7418",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "New Request",
+      "id": "4ac2c348-bc66-400d-8fc8-90099ba74a16",
+      "request": {
+        "auth": {
+          "type": "jwt",
+          "jwt": [
+            {
+              "key": "secret",
+              "value": "29f70ce98ea22e16dbf455272580574d018d35121254ca1bbeaa01bff92566fb",
+              "type": "string"
+            },
+            {
+              "key": "isSecretBase64Encoded",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "key": "header",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "key": "payload",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "key": "addTokenTo",
+              "value": "header",
+              "type": "string"
+            },
+            {
+              "key": "algorithm",
+              "value": "HS256",
+              "type": "string"
+            },
+            {
+              "key": "headerPrefix",
+              "value": "Bearer",
+              "type": "string"
+            },
+            {
+              "key": "queryParamKey",
+              "value": "token",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"title\":\"test1\",\r\n    \"userId\": \"6963d4394c64530d14351c69\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "http://localhost:5000/api/projects/",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "5000",
+          "path": [
+            "api",
+            "projects",
+            ""
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "New Request",
+      "id": "e8204a2c-3d23-4f6f-a8f6-2d95a3bdfddc",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "jwt",
+    "jwt": [
+      {
+        "key": "secret",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      },
+      {
+        "key": "algorithm",
+        "value": "HS256",
+        "type": "string"
+      },
+      {
+        "key": "isSecretBase64Encoded",
+        "value": false,
+        "type": "boolean"
+      },
+      {
+        "key": "payload",
+        "value": "{}",
+        "type": "string"
+      },
+      {
+        "key": "addTokenTo",
+        "value": "header",
+        "type": "string"
+      },
+      {
+        "key": "headerPrefix",
+        "value": "Bearer",
+        "type": "string"
+      },
+      {
+        "key": "queryParamKey",
+        "value": "token",
+        "type": "string"
+      },
+      {
+        "key": "header",
+        "value": "{}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "id": "41ed1971-c299-468c-8ceb-8837cf00693a",
+      "key": "jwt_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NjNkNDM5NGM2NDUzMGQxNDM1MWM2OSIsImlhdCI6MTJ1QXSmudrrPFdqmuYF2bzvWtCAdpHiNTc2fQ.cr_LOl0SEl8Kh-tp6rCflAHGchyKvx0HSrDiP7gVZLY"
+    }
+  ]
+}

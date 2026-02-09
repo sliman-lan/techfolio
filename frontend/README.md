@@ -39,6 +39,7 @@ npm start
 
 - Build: `npm run build` will create optimized static assets.
 - When deploying, ensure the frontend's API base URL points to the production backend and that `CORS` and HTTPS are configured on the backend.
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
@@ -90,22 +91,50 @@ To learn React, check out the [React documentation](https://reactjs.org/).
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
 
-### Analyzing the Bundle Size
+# TechFolio — Frontend
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+واجهة الويب مبنية بـ React (Create React App). هذا الملف يشرح كيفية تشغيل الواجهة والربط مع الـ API.
 
-### Making a Progressive Web App
+## تشغيل المشروع محليًا
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+1. تحديث عنوان الـ API إذا لزم الأمر (في `frontend/src/services/api.js` أو عبر متغير بيئي `REACT_APP_API_BASE`).
 
-### Advanced Configuration
+2. تثبيت الحزم وتشغيل التطبيق:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+```bash
+cd frontend
+npm install
+npm start
+```
 
-### Deployment
+3. افتح المتصفح على: `http://localhost:3000`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+## نقاط اهتمام للمطورين
 
-### `npm run build` fails to minify
+- `src/services/api.js` — طبقة الاتصال بالـ API (axios). استخدم الوظائف المجمعة `authAPI, usersAPI, projectsAPI` بدلاً من استدعاءات مباشرة.
+- `src/context/AuthContext.js` — منطق المصادقة وتخزين التوكن/المستخدم.
+- `src/pages/` — صفحات التطبيق (الملف الشخصي، تفاصيل المشروع، إلخ).
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## أمثلة سريعة
+
+1. تسجيل الدخول عبر الواجهة يطلب `/api/auth/login` ثم يخزن التوكن في `localStorage` ويتجه المستخدم إلى لوحة التحكم.
+
+2. عند رفع مشروع، تأكد من إرسال `FormData` مع الحقل `images` للملفات.
+
+## تحضير للنشر
+
+- إنشاء الـ build:
+
+```bash
+npm run build
+```
+
+- راجع إعدادات الخادم لاستضافة الملفات الثابتة (`build/`) وتأكد من تكوين `REACT_APP_API_BASE` للإشارة إلى الـ API الحي.
+
+## اختبارات بسيطة
+
+- `npm test` لتشغيل البيئة التفاعلية لاختبارات `create-react-app` (إذا أضفت اختبارات لاحقًا).
+
+## موارد
+
+- مستندات Create React App: https://facebook.github.io/create-react-app/docs/getting-started

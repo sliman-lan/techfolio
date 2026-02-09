@@ -41,7 +41,15 @@ router.get("/", async (req, res) => {
             .populate("userId", "name avatar")
             .sort({ createdAt: -1 });
 
-        res.json(projects);
+        // Normalize response: provide `owner` and `user` aliases for frontend
+        const normalized = projects.map((p) => {
+            const obj = p.toObject ? p.toObject() : { ...p };
+            obj.owner = obj.userId || null;
+            obj.user = obj.userId || null;
+            return obj;
+        });
+
+        res.json(normalized);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -60,7 +68,11 @@ router.get("/:id", async (req, res) => {
             return res.status(404).json({ message: "المشروع غير موجود" });
         }
 
-        res.json(project);
+        // Normalize response to include `owner` and `user` aliases
+        const projectObj = project.toObject ? project.toObject() : project;
+        projectObj.owner = projectObj.userId || null;
+        projectObj.user = projectObj.userId || null;
+        res.json(projectObj);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -87,7 +99,7 @@ router.post("/", protect, upload.array("images", 6), async (req, res) => {
         if (req.files && req.files.length > 0) {
             const baseUrl = `${req.protocol}://${req.get("host")}`;
             project.images = req.files.map(
-                (f) => `${baseUrl}/uploads/${f.filename}`
+                (f) => `${baseUrl}/uploads/${f.filename}`,
             );
         }
 
@@ -122,7 +134,7 @@ router.put("/:id", protect, upload.array("images", 6), async (req, res) => {
             const baseUrl = `${req.protocol}://${req.get("host")}`;
             // append new images
             project.images = project.images.concat(
-                req.files.map((f) => `${baseUrl}/uploads/${f.filename}`)
+                req.files.map((f) => `${baseUrl}/uploads/${f.filename}`),
             );
         }
 
@@ -170,7 +182,7 @@ router.post("/:id/rate", protect, async (req, res) => {
 
         // التحقق إذا كان المستخدم قد قام بالتقييم مسبقاً
         const existingRating = project.ratings.find(
-            (rating) => rating.userId.toString() === req.user._id.toString()
+            (rating) => rating.userId.toString() === req.user._id.toString(),
         );
 
         if (existingRating) {

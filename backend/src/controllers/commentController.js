@@ -59,9 +59,22 @@ const addComment = async (req, res) => {
             .populate("userId", "name avatar")
             .populate("parentComment", "content userId");
 
+        // Normalize response shape for clients that expect `user` and `text`
+        const responseComment = {
+            _id: populatedComment._id,
+            user: populatedComment.userId || null,
+            userId: populatedComment.userId || null,
+            text: populatedComment.content,
+            content: populatedComment.content,
+            parentComment: populatedComment.parentComment || null,
+            likesCount: (populatedComment.likes || []).length,
+            likes: populatedComment.likes || [],
+            createdAt: populatedComment.createdAt,
+        };
+
         res.status(201).json({
             success: true,
-            data: populatedComment,
+            data: responseComment,
         });
     } catch (error) {
         console.error("Error in addComment:", error);
@@ -86,30 +99,54 @@ const getProjectComments = async (req, res) => {
         // الحصول على التعليقات الرئيسية فقط
         const comments = await Comment.find({
             projectId,
-            parentComment: { $exists: false },
+            $or: [{ parentComment: { $exists: false } }, { parentComment: null }],
         })
             .populate("userId", "name avatar")
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit);
 
-        // الحصول على الردود لكل تعليق
+        // الحصول على الردود لكل تعليق و normalize
+        const normalizedComments = [];
         for (let comment of comments) {
-            comment.replies = await Comment.find({
-                parentComment: comment._id,
-            })
+            const replies = await Comment.find({ parentComment: comment._id })
                 .populate("userId", "name avatar")
                 .sort({ createdAt: 1 });
+
+            const mappedReplies = replies.map((r) => ({
+                _id: r._id,
+                user: r.userId || null,
+                userId: r.userId || null,
+                text: r.content,
+                content: r.content,
+                parentComment: r.parentComment || null,
+                likesCount: (r.likes || []).length,
+                likes: r.likes || [],
+                createdAt: r.createdAt,
+            }));
+
+            normalizedComments.push({
+                _id: comment._id,
+                user: comment.userId || null,
+                userId: comment.userId || null,
+                text: comment.content,
+                content: comment.content,
+                parentComment: comment.parentComment || null,
+                likesCount: (comment.likes || []).length,
+                likes: comment.likes || [],
+                createdAt: comment.createdAt,
+                replies: mappedReplies,
+            });
         }
 
         const total = await Comment.countDocuments({
             projectId,
-            parentComment: { $exists: false },
+            $or: [{ parentComment: { $exists: false } }, { parentComment: null }],
         });
 
         res.json({
             success: true,
-            data: comments,
+            data: normalizedComments,
             pagination: {
                 page,
                 limit,

@@ -32,4 +32,32 @@ const projectsAPI = {
         }),
 };
 
-export { api, authAPI, usersAPI, projectsAPI };
+const commentAPI = {
+    getProjectComments: (projectId, page = 1, limit = 20) =>
+        api.get(`/comments/project/${projectId}`, { params: { page, limit } }),
+
+    addComment: (projectId, content, parentComment) => {
+        const payload = { projectId, content };
+        if (parentComment) payload.parentComment = parentComment;
+        const token = localStorage.getItem("authToken");
+        return api.post("/comments", payload, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+    },
+
+    deleteComment: (commentId) => {
+        const token = localStorage.getItem("authToken");
+        return api.delete(`/comments/${commentId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+    },
+
+    toggleLike: (commentId) => {
+        const token = localStorage.getItem("authToken");
+        return api.post(`/comments/${commentId}/like`, {}, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+    },
+};
+
+export { api, authAPI, usersAPI, projectsAPI, commentAPI };

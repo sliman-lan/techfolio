@@ -1,4 +1,4 @@
-// app/profile/projects.js - يعمل مع API حقيقي
+// app/profile/projects.js
 import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
@@ -143,11 +143,11 @@ export default function MyProjects() {
                 <View style={styles.header}>
                     <TouchableOpacity
                         style={styles.backButton}
-                        onPress={() => router.back()}
+                        onPress={() => router.push("/profile")} // ✅ تم التصحيح
                     >
                         <Ionicons name="arrow-back" size={24} color="#007AFF" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>مشاريعي</Text>
+                    <Text style={styles.headerTitle}>مواقعي</Text>
                 </View>
 
                 <View style={styles.authRequiredContainer}>
@@ -291,12 +291,12 @@ export default function MyProjects() {
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
-                    onPress={() => router.back()}
+                    onPress={() => router.push("/profile")} // ✅ تم التصحيح
                 >
                     <Ionicons name="arrow-back" size={24} color="#007AFF" />
                 </TouchableOpacity>
 
-                <Text style={styles.headerTitle}>مشاريعي</Text>
+                <Text style={styles.headerTitle}>مواقعي</Text>
 
                 <TouchableOpacity
                     style={styles.filterButton}
