@@ -4,6 +4,20 @@ const api = axios.create({
     baseURL: process.env.REACT_APP_API_BASE || "http://localhost:5000/api",
 });
 
+// attach auth token from localStorage to every request if present
+api.interceptors.request.use((config) => {
+    try {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+            config.headers = config.headers || {};
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+    } catch (e) {
+        // ignore
+    }
+    return config;
+});
+
 const authAPI = {
     login: (credentials) => api.post("/auth/login", credentials),
     register: (payload) => {
@@ -26,10 +40,10 @@ const projectsAPI = {
     // accept optional params object: { userId, category, ... }
     list: (params) => api.get("/projects", { params }),
     get: (id) => api.get(`/projects/${id}`),
-    create: (formData) =>
-        api.post("/projects", formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-        }),
+    create: (formData) => api.post("/projects", formData),
+    delete: (id) => api.delete(`/projects/${id}`),
+    rate: (id, payload) => api.post(`/projects/${id}/rate`, payload),
+    adminList: () => api.get("/projects/admin/all"),
 };
 
 const commentAPI = {
@@ -39,29 +53,12 @@ const commentAPI = {
     addComment: (projectId, content, parentComment) => {
         const payload = { projectId, content };
         if (parentComment) payload.parentComment = parentComment;
-        const token = localStorage.getItem("authToken");
-        return api.post("/comments", payload, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+        return api.post("/comments", payload);
     },
 
-    deleteComment: (commentId) => {
-        const token = localStorage.getItem("authToken");
-        return api.delete(`/comments/${commentId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-    },
+    deleteComment: (commentId) => api.delete(`/comments/${commentId}`),
 
-    toggleLike: (commentId) => {
-        const token = localStorage.getItem("authToken");
-        return api.post(
-            `/comments/${commentId}/like`,
-            {},
-            {
-                headers: { Authorization: `Bearer ${token}` },
-            },
-        );
-    },
+    toggleLike: (commentId) => api.post(`/comments/${commentId}/like`),
 };
 
 export { api, authAPI, usersAPI, projectsAPI, commentAPI };

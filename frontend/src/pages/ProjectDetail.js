@@ -1,96 +1,59 @@
-import React, { useEffect, useState } from "react";
-import { projectsAPI } from "../services/api";
+import React from "react";
+import useProject from "../hooks/useProject";
+import useComments from "../hooks/useComments";
+import ProjectInfo from "../components/project/ProjectInfo";
+import CommentForm from "../components/project/CommentForm";
+import CommentList from "../components/project/CommentList";
 
 export default function ProjectDetail({ id, navigate }) {
-    const [project, setProject] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const { project, loading, error } = useProject(id);
+    const {
+        comments,
+        loading: commentsLoading,
+        addComment,
+        toggleLike,
+    } = useComments(id);
 
-    useEffect(() => {
-        let mounted = true;
-        setLoading(true);
-        projectsAPI
-            .get(id)
-            .then((res) => {
-                if (mounted) setProject(res.data || null);
-            })
-            .catch((err) => {
-                if (mounted) setError(err.response?.data?.message || "حدث خطأ");
-            })
-            .finally(() => mounted && setLoading(false));
-        return () => (mounted = false);
-    }, [id]);
+    if (loading) {
+        return (
+            <div className="text-center py-5">
+                <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">جارٍ التحميل...</span>
+                </div>
+                <p className="mt-2 text-muted">جاري تحميل المشروع...</p>
+            </div>
+        );
+    }
 
-    if (loading) return <div className="alert alert-info">جارٍ التحميل...</div>;
-    if (error) return <div className="alert alert-danger">{error}</div>;
-    if (!project)
-        return <div className="alert alert-warning">المشروع غير موجود</div>;
+    if (error) {
+        return (
+            <div className="alert alert-danger rounded-3">
+                <i className="bi bi-exclamation-triangle me-2"></i>
+                {error}
+            </div>
+        );
+    }
 
-    const openUserProfile = () => {
-        if (navigate && project.userId) {
-            const userId = project.userId._id || project.userId;
-            navigate("profile", { userId });
-        }
-    };
+    if (!project) {
+        return (
+            <div className="alert alert-warning rounded-3">
+                <i className="bi bi-question-circle me-2"></i>
+                المشروع غير موجود
+            </div>
+        );
+    }
 
     return (
-        <div className="card shadow-sm">
-            <img
-                src={
-                    (project.images && project.images[0]) ||
-                    "/default-project.svg"
-                }
-                className="card-img-top"
-                alt="project"
-            />
-            <div className="card-body">
-                <h4 className="card-title">{project.title}</h4>
-                <p className="text-muted">
-                    المالك:{" "}
-                    {project.userId ? (
-                        <button
-                            className="btn btn-link p-0"
-                            onClick={openUserProfile}
-                        >
-                            {project.userId.name}
-                        </button>
-                    ) : (
-                        "غير معروف"
-                    )}
-                </p>
-                <p>{project.description}</p>
-                {project.demoUrl && (
-                    <p>
-                        رابط العرض:{" "}
-                        <a
-                            href={project.demoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            {project.demoUrl}
-                        </a>
-                    </p>
-                )}
-                {project.githubUrl && (
-                    <p>
-                        GitHub:{" "}
-                        <a
-                            href={project.githubUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            {project.githubUrl}
-                        </a>
-                    </p>
-                )}
-                <div>
-                    <button
-                        className="btn btn-secondary me-2"
-                        onClick={() => navigate && navigate("home")}
-                    >
-                        رجوع
-                    </button>
-                </div>
+        <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
+            <ProjectInfo project={project} navigate={navigate} />
+            <div className="card-body p-4 border-top">
+                <h5 className="fw-bold mb-4">التعليقات</h5>
+                <CommentForm onSubmit={addComment} />
+                <CommentList
+                    comments={comments}
+                    loading={commentsLoading}
+                    onToggleLike={toggleLike}
+                />
             </div>
         </div>
     );

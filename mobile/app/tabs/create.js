@@ -1,5 +1,6 @@
 // app/tabs/create.js
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     View,
     Text,
@@ -14,12 +15,39 @@ import { router } from "expo-router";
 import { projectsAPI, checkAuthStatus } from "../../src/services/api";
 
 export default function Create() {
+    const CATEGORIES = [
+        { label: "عام", value: "other" },
+        { label: "تطوير ويب", value: "web" },
+        { label: "تصميم", value: "design" },
+        { label: "موبايل", value: "mobile" },
+        { label: "ذكاء اصطناعي", value: "ai" },
+    ];
+
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [budget, setBudget] = useState("");
     const [deadline, setDeadline] = useState("");
-    const [category, setCategory] = useState("");
+    const [category, setCategory] = useState(CATEGORIES[1].value);
     const [loading, setLoading] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    // load user and check role to prevent admins from creating projects
+    useEffect(() => {
+        let mounted = true;
+        AsyncStorage.getItem("user")
+            .then((str) => {
+                if (!mounted) return;
+                if (!str) return;
+                try {
+                    const u = JSON.parse(str);
+                    if (u && u.role === "admin") setIsAdmin(true);
+                } catch (e) {
+                    // ignore
+                }
+            })
+            .catch(() => {});
+        return () => (mounted = false);
+    }, []);
 
     // app/tabs/create.js (تعديل دالة handleCreate)
     const handleCreate = async () => {
@@ -44,6 +72,10 @@ export default function Create() {
             Alert.alert("خطأ", "يرجى إدخال عنوان للمشروع");
             return;
         }
+        if (!description.trim()) {
+            Alert.alert("خطأ", "يرجى إدخال وصف للمشروع");
+            return;
+        }
 
         setLoading(true);
         try {
@@ -52,29 +84,32 @@ export default function Create() {
                 description: description.trim(),
                 budget: budget ? parseFloat(budget) : 0,
                 deadline: deadline.trim() || null,
-                category: category.trim() || "عام",
+                category: category || "web",
                 status: "قيد التخطيط",
             };
 
             console.log("📤 إرسال بيانات المشروع:", projectData);
             const response = await projectsAPI.create(projectData);
+            console.log("📥 استجابة إنشاء المشروع:", response);
 
-            Alert.alert("نجاح", "تم إنشاء المشروع بنجاح", [
-                {
-                    text: "حسناً",
-                    onPress: () => {
-                        // إعادة تعيين الحقول
-                        setTitle("");
-                        setDescription("");
-                        setBudget("");
-                        setDeadline("");
-                        setCategory("");
+            // إذا أعاد الخادم الكائن المنشأ أو معرفه نفترض النجاح
+            const createdId =
+                response?._id || response?.id || response?.data?._id || null;
 
-                        // العودة للصفحة الرئيسية
-                        router.push("/tabs/home");
-                    },
-                },
-            ]);
+            // إعادة تعيين الحقول والتنقل فوراً عند النجاح
+            if (createdId || response) {
+                setTitle("");
+                setDescription("");
+                setBudget("");
+                setDeadline("");
+                setCategory(CATEGORIES[1].value);
+                router.push("/tabs/home");
+            } else {
+                Alert.alert(
+                    "تنبيه",
+                    "لم يتم إنشاء المشروع. تحقق من الكونسول للمزيد.",
+                );
+            }
         } catch (error) {
             console.error("❌ خطأ في إنشاء المشروع:", error);
 
@@ -103,6 +138,28 @@ export default function Create() {
             setLoading(false);
         }
     };
+    if (isAdmin) {
+        return (
+            <View
+                style={{
+                    flex: 1,
+                    justifyContent: "center",
+                    alignItems: "center",
+                }}
+            >
+                <Text style={{ fontSize: 18, marginBottom: 12 }}>
+                    لا يمكنك إنشاء مشاريع كمشرف
+                </Text>
+                <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={() => router.back()}
+                >
+                    <Text style={styles.cancelButtonText}>عودة</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
     return (
         <ScrollView
             style={styles.container}
@@ -158,14 +215,34 @@ export default function Create() {
                 />
 
                 <Text style={styles.label}>التصنيف</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="أدخل تصنيف المشروع (اختياري)"
-                    placeholderTextColor="#999"
-                    value={category}
-                    onChangeText={setCategory}
-                    editable={!loading}
-                />
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginBottom: 20 }}
+                >
+                    {CATEGORIES.map((cat) => (
+                        <TouchableOpacity
+                            key={cat.value}
+                            style={[
+                                styles.categoryButton,
+                                category === cat.value &&
+                                    styles.categorySelected,
+                            ]}
+                            onPress={() => setCategory(cat.value)}
+                            disabled={loading}
+                        >
+                            <Text
+                                style={[
+                                    styles.categoryText,
+                                    category === cat.value &&
+                                        styles.categoryTextSelected,
+                                ]}
+                            >
+                                {cat.label}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
 
                 <View style={styles.note}>
                     <Text style={styles.noteText}>* الحقول المطلوبة</Text>
@@ -279,5 +356,26 @@ const styles = StyleSheet.create({
         color: "#FF3B30",
         fontSize: 18,
         fontWeight: "600",
+    },
+    categoryButton: {
+        backgroundColor: "#fff",
+        borderWidth: 1,
+        borderColor: "#E5E5EA",
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        borderRadius: 20,
+        marginRight: 10,
+    },
+    categorySelected: {
+        backgroundColor: "#007AFF",
+        borderColor: "#007AFF",
+    },
+    categoryText: {
+        color: "#1D1D1F",
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    categoryTextSelected: {
+        color: "#fff",
     },
 });

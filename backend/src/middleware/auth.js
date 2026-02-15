@@ -9,6 +9,8 @@ require("dotenv").config({
 console.log("🔐 تهيئة middleware المصادقة...");
 console.log("🔐 JWT_SECRET:", process.env.JWT_SECRET ? "محدد" : "غير محدد");
 
+const User = require("../models/User");
+
 const protect = async (req, res, next) => {
     console.log("\n=== 🔒 مصادقة طلب ===");
     console.log(`📨 ${req.method} ${req.originalUrl}`);
@@ -65,22 +67,19 @@ const protect = async (req, res, next) => {
                 algorithms: ["HS256"],
             });
 
-            console.log("✅ التحقق ناجح!");
-            console.log("👤 بيانات المستخدم:", {
-                id: decoded.id,
-                email: decoded.email,
-                name: decoded.name,
-            });
+            // Fetch the full user from DB so we have the role and other fields
+            const userFromDb = await User.findById(decoded.id).select(
+                "-password",
+            );
+            if (!userFromDb) {
+                return res
+                    .status(401)
+                    .json({ success: false, message: "المستخدم غير موجود" });
+            }
 
-            // 5. إضافة المستخدم إلى الطلب
-            // Ensure controllers can use `req.user._id` (common in codebase)
-            req.user = {
-                _id: decoded.id || decoded._id,
-                id: decoded.id || decoded._id,
-                email: decoded.email,
-                name: decoded.name,
-                role: decoded.role || decoded?.role,
-            };
+            req.user = userFromDb;
+            // ensure common aliases exist
+            req.user._id = userFromDb._id;
 
             next();
         } catch (jwtError) {

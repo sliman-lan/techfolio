@@ -19,6 +19,8 @@ export default function EditProfile() {
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [bio, setBio] = useState("");
+    const [skills, setSkills] = useState("");
+    const [certifications, setCertifications] = useState([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState({});
@@ -38,6 +40,16 @@ export default function EditProfile() {
                 setName(user.name || "");
                 setEmail(user.email || "");
                 setBio(user.bio || "");
+                setSkills(
+                    Array.isArray(user.skills)
+                        ? (user.skills || []).join(", ")
+                        : user.skills || "",
+                );
+                setCertifications(
+                    Array.isArray(user.certifications)
+                        ? user.certifications
+                        : [],
+                );
             }
         } catch (error) {
             console.error("❌ خطأ في تحميل بيانات المستخدم:", error);
@@ -82,6 +94,15 @@ export default function EditProfile() {
                 name: name.trim(),
                 email: email.trim(),
                 bio: bio.trim(),
+                skills: skills
+                    ? skills
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean)
+                    : [],
+                certifications: Array.isArray(certifications)
+                    ? certifications
+                    : [],
                 updatedAt: new Date().toISOString(),
             };
 
@@ -92,6 +113,8 @@ export default function EditProfile() {
                     name: updatedUser.name,
                     email: updatedUser.email,
                     bio: updatedUser.bio,
+                    skills: updatedUser.skills,
+                    certifications: updatedUser.certifications,
                 });
 
                 console.log("updateProfile response:", apiRes);
@@ -250,6 +273,68 @@ export default function EditProfile() {
                         maxLength={200}
                     />
                     <Text style={styles.hintText}>{bio.length}/200 حرف</Text>
+                </View>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>المهارات (مفصولة بفواصل)</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="مثال: React, Node.js"
+                        value={skills}
+                        onChangeText={setSkills}
+                        editable={!saving}
+                    />
+                </View>
+
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>الشهادات (اختياري)</Text>
+                    {certifications.map((c, i) => (
+                        <View key={i} style={{ marginBottom: 8 }}>
+                            <TextInput
+                                style={[styles.input, { marginBottom: 8 }]}
+                                placeholder="العنوان"
+                                value={c.title || ""}
+                                onChangeText={(val) => {
+                                    const next = [...certifications];
+                                    next[i] = { ...next[i], title: val };
+                                    setCertifications(next);
+                                }}
+                            />
+                            <TextInput
+                                style={[styles.input, { marginBottom: 8 }]}
+                                placeholder="الجهة المانحة"
+                                value={c.issuer || ""}
+                                onChangeText={(val) => {
+                                    const next = [...certifications];
+                                    next[i] = { ...next[i], issuer: val };
+                                    setCertifications(next);
+                                }}
+                            />
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setCertifications(
+                                        certifications.filter(
+                                            (_, idx) => idx !== i,
+                                        ),
+                                    );
+                                }}
+                                style={{ marginBottom: 4 }}
+                            >
+                                <Text style={{ color: "#FF3B30" }}>
+                                    حذف الشهادة
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    ))}
+                    <TouchableOpacity
+                        onPress={() =>
+                            setCertifications([
+                                ...certifications,
+                                { title: "", issuer: "" },
+                            ])
+                        }
+                    >
+                        <Text style={{ color: "#007AFF" }}>إضافة شهادة</Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* أزرار التحكم */}

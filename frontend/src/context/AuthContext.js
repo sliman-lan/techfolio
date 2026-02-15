@@ -4,7 +4,7 @@ import { authAPI, api, usersAPI } from "../services/api";
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-    const [token, setToken] = useState(() => localStorage.getItem("token"));
+    const [token, setToken] = useState(() => localStorage.getItem("authToken"));
     const [user, setUser] = useState(() => {
         try {
             const raw = localStorage.getItem("user");
@@ -16,10 +16,10 @@ export function AuthProvider({ children }) {
 
     useEffect(() => {
         if (token) {
-            localStorage.setItem("token", token);
+            localStorage.setItem("authToken", token);
             api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
         } else {
-            localStorage.removeItem("token");
+            localStorage.removeItem("authToken");
             delete api.defaults.headers.common["Authorization"];
         }
     }, [token]);
@@ -66,7 +66,14 @@ export function AuthProvider({ children }) {
 
     const updateProfile = async (payload) => {
         const res = await usersAPI.updateProfile(payload);
-        const data = res.data ? res.data : null;
+        // usersAPI.updateProfile returns response.data typically, but some endpoints
+        // may return the full axios response. Normalize both shapes.
+        let data = null;
+        if (!res) data = null;
+        else if (res.data && res.data.data) data = res.data.data;
+        else if (res.data) data = res.data;
+        else data = res;
+
         if (data) {
             // backend returns updated fields; merge into user state
             setUser((u) => ({ ...(u || {}), ...data }));

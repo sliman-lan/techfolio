@@ -354,26 +354,46 @@ export const projectsAPI = {
         }
     },
 
-    create: async (projectData) => {
+    create: async (projectData, images = []) => {
         try {
-            const token =
-                (await AsyncStorage.getItem("authToken")) ||
-                safeLocal.getItem("authToken");
+            // Use the configured axios instance so interceptors and baseURL apply
+            // If images are provided, send multipart/form-data, otherwise JSON
+            if (images && images.length > 0) {
+                const form = new FormData();
+                // append JSON fields
+                Object.keys(projectData || {}).forEach((k) => {
+                    if (
+                        projectData[k] !== undefined &&
+                        projectData[k] !== null
+                    ) {
+                        form.append(k, projectData[k]);
+                    }
+                });
 
-            const response = await axios.post(
-                `${API_URL}/projects`,
-                projectData,
-                {
+                // append images (expects File/Blob objects or objects with uri/name/type for RN web)
+                images.forEach((file, idx) => {
+                    // in React Native / Expo web, file may be { uri, name, type }
+                    form.append("images", file);
+                });
+
+                const response = await api.post("/projects", form, {
                     headers: {
-                        Authorization: `Bearer ${token}`,
-                        "Content-Type": "application/json",
+                        "Content-Type": "multipart/form-data",
                     },
-                },
-            );
+                });
 
+                return response.data;
+            }
+
+            // No images: send JSON using api instance (adds Authorization via interceptor)
+            const response = await api.post("/projects", projectData);
             return response.data;
         } catch (error) {
-            console.error("❌ خطأ في إنشاء المشروع:", error);
+            console.error("❌ خطأ في إنشاء المشروع:", {
+                message: error.message,
+                status: error.response?.status,
+                data: error.response?.data,
+            });
             throw error;
         }
     },

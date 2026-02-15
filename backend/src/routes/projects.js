@@ -3,9 +3,10 @@ const router = express.Router();
 const path = require("path");
 const multer = require("multer");
 const Project = require("../models/Project");
+const User = require("../models/User");
 const { protect } = require("../middleware/auth");
-
-// multer storage config
+const { isAdmin } = require("../middleware/admin");
+// multer storage config (used for image uploads)
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, path.join(__dirname, "..", "uploads"));
@@ -18,23 +19,35 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-
 // @route   GET /api/projects
-// @desc    الحصول على جميع المشاريع
+// @desc    الحصول على جميع المشاريع (يدعم فلترة بسيطة وبحث بالعناوين/اسم المؤلف)
 // @access  Public
 router.get("/", async (req, res) => {
     try {
-        // Support optional query params for server-side filtering: userId, category, q (search)
         const { userId, category, q } = req.query;
         const filter = { isPublic: true };
         if (userId) filter.userId = userId;
         if (category) filter.category = category;
+
         if (q) {
-            filter.$or = [
-                { title: { $regex: q, $options: "i" } },
-                { description: { $regex: q, $options: "i" } },
-                { shortDescription: { $regex: q, $options: "i" } },
-            ];
+            // Search only by project title and author name (username)
+            const regex = { $regex: q, $options: "i" };
+
+            // Find users whose name matches the query so we can include their projects
+            let authorIds = [];
+            try {
+                const matchedUsers = await User.find({ name: regex }).select(
+                    "_id",
+                );
+                authorIds = matchedUsers.map((u) => u._id);
+            } catch (e) {
+                authorIds = [];
+            }
+
+            const or = [{ title: regex }];
+            if (authorIds.length > 0) or.push({ userId: { $in: authorIds } });
+
+            filter.$or = or;
         }
 
         const projects = await Project.find(filter)
@@ -83,6 +96,12 @@ router.get("/:id", async (req, res) => {
 // @access  Private
 router.post("/", protect, upload.array("images", 6), async (req, res) => {
     try {
+        // منع المشرفين من إنشاء مشاريع (دور المشرف مخصص للتقييم والحذف فقط)
+        if (req.user && req.user.role === "admin") {
+            return res
+                .status(403)
+                .json({ message: "المشرف غير مسموح له بإنشاء مشاريع" });
+        }
         const body = req.body || {};
 
         const project = new Project({
@@ -156,7 +175,11 @@ router.delete("/:id", protect, async (req, res) => {
             return res.status(404).json({ message: "المشروع غير موجود" });
         }
 
-        if (project.userId.toString() !== req.user._id.toString()) {
+        // المالك أو المشرف يمكنه الحذف
+        if (
+            project.userId.toString() !== req.user._id.toString() &&
+            req.user.role !== "admin"
+        ) {
             return res
                 .status(403)
                 .json({ message: "ليس لديك صلاحية لحذف هذا المشروع" });
@@ -164,6 +187,31 @@ router.delete("/:id", protect, async (req, res) => {
 
         await project.remove();
         res.json({ message: "تم حذف المشروع بنجاح" });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// ----------------------
+// Admin-only routes
+// ----------------------
+// @route   GET /api/admin/projects
+// @desc    الحصول على جميع المشاريع (بما في ذلك الخاصة) - لعرضها في لوحة المشرف
+// @access  Private (admin)
+router.get("/admin/all", protect, isAdmin, async (req, res) => {
+    try {
+        const projects = await Project.find({})
+            .populate("userId", "name email avatar role")
+            .sort({ createdAt: -1 });
+
+        const normalized = projects.map((p) => {
+            const obj = p.toObject ? p.toObject() : { ...p };
+            obj.owner = obj.userId || null;
+            obj.user = obj.userId || null;
+            return obj;
+        });
+
+        res.json({ success: true, data: normalized });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

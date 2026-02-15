@@ -28,6 +28,8 @@ export default function ProfileScreen() {
         followingCount: 0,
         projectsCount: 0,
         likesCount: 0,
+        ratedCount: 0,
+        unratedCount: 0,
     });
 
     // تحديد إذا كان هذا البروفايل للمستخدم الحالي
@@ -102,10 +104,22 @@ export default function ProfileScreen() {
                     }
 
                     // جلب إحصائيات المستخدم الحالي
-                    const statsResponse = await followAPI.getUserStats(
-                        currentUserData._id,
-                    );
-                    setStats(statsResponse.data);
+                    // If admin, compute global project stats
+                    if (currentUserData.role === "admin") {
+                        try {
+                            const adminRes = await (await import("../../src/services/api")).projectsAPI.adminList();
+                            const projects = (adminRes.data && adminRes.data.data) || adminRes.data || [];
+                            const total = projects.length;
+                            const rated = projects.filter((p) => Array.isArray(p.ratings) && p.ratings.length > 0).length;
+                            const unrated = total - rated;
+                            setStats((prev) => ({ ...prev, projectsCount: total, ratedCount: rated, unratedCount: unrated }));
+                        } catch (e) {
+                            console.warn("failed loading admin project stats", e);
+                        }
+                    } else {
+                        const statsResponse = await followAPI.getUserStats(currentUserData._id);
+                        setStats(statsResponse.data);
+                    }
                 }
             }
         } catch (error) {
@@ -246,13 +260,27 @@ export default function ProfileScreen() {
                 {/* الإحصائيات */}
                 <View style={styles.statsContainer}>
                     <TouchableOpacity style={styles.statItem}>
-                        <Text style={styles.statNumber}>
-                            {stats.projectsCount}
-                        </Text>
+                        <Text style={styles.statNumber}>{stats.projectsCount}</Text>
                         <Text style={styles.statLabel}>المشاريع</Text>
                     </TouchableOpacity>
 
                     <View style={styles.statDivider} />
+
+                    {/* admin extra stats */}
+                    {currentUser?.role === "admin" && (
+                        <>
+                            <TouchableOpacity style={styles.statItem}>
+                                <Text style={styles.statNumber}>{stats.ratedCount}</Text>
+                                <Text style={styles.statLabel}>المقيمة</Text>
+                            </TouchableOpacity>
+                            <View style={styles.statDivider} />
+                            <TouchableOpacity style={styles.statItem}>
+                                <Text style={styles.statNumber}>{stats.unratedCount}</Text>
+                                <Text style={styles.statLabel}>غير المقيمة</Text>
+                            </TouchableOpacity>
+                            <View style={styles.statDivider} />
+                        </>
+                    )}
 
                     <TouchableOpacity
                         style={styles.statItem}
@@ -358,24 +386,16 @@ export default function ProfileScreen() {
                         />
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.optionItem}
-                        onPress={() => router.push("/profile/projects")}
-                    >
-                        <View style={styles.optionLeft}>
-                            <Ionicons
-                                name="folder-outline"
-                                size={22}
-                                color="#007AFF"
-                            />
-                            <Text style={styles.optionText}>مشاريعي</Text>
-                        </View>
-                        <Ionicons
-                            name="chevron-forward"
-                            size={20}
-                            color="#8E8E93"
-                        />
-                    </TouchableOpacity>
+                    {/* Hide 'مشاريعي' for admin accounts */}
+                    {currentUser?.role !== "admin" && (
+                        <TouchableOpacity style={styles.optionItem} onPress={() => router.push("/profile/projects")}>
+                            <View style={styles.optionLeft}>
+                                <Ionicons name="folder-outline" size={22} color="#007AFF" />
+                                <Text style={styles.optionText}>مشاريعي</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+                        </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity
                         style={styles.optionItem}
