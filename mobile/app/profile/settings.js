@@ -1,4 +1,4 @@
-// app/profile/settings.js - معدل باستخدام router.push
+// app/profile/settings.js - نسخة محسنة
 import React, { useState } from "react";
 import {
     View,
@@ -18,52 +18,23 @@ export default function Settings() {
     const [notifications, setNotifications] = useState(true);
     const [darkMode, setDarkMode] = useState(false);
     const [privacyMode, setPrivacyMode] = useState(false);
-
-    const handleBack = () => {
-        router.push("/profile");
-    };
-
     const { logout } = useAuth();
 
-    const handleLogout = async () => {
-        if (typeof window !== "undefined") {
-            const ok = window.confirm("هل تريد تسجيل الخروج؟");
-            if (!ok) return;
-            try {
-                if (logout) await logout();
-            } catch (e) {
-                console.warn("Logout failed:", e);
-            }
-            return;
-        }
-
+    const handleLogout = () => {
         Alert.alert("تسجيل الخروج", "هل تريد تسجيل الخروج؟", [
             { text: "إلغاء", style: "cancel" },
             {
                 text: "تسجيل الخروج",
                 style: "destructive",
                 onPress: async () => {
-                    console.log(
-                        "Settings logout onPress invoked, logout func exists:",
-                        typeof logout === "function",
-                    );
-                    try {
-                        if (logout) {
-                            console.log("Calling logout() from settings");
-                            await logout();
-                            console.log("logout() resolved");
-                        } else {
-                            console.log("logout() not available in context");
-                        }
-                    } catch (e) {
-                        console.warn("Logout failed:", e);
-                    }
+                    await logout?.();
+                    router.replace("/auth/login");
                 },
             },
         ]);
     };
 
-    const settingsOptions = [
+    const settingsSections = [
         {
             title: "الحساب",
             items: [
@@ -101,10 +72,15 @@ export default function Settings() {
                     value: darkMode,
                     onToggle: setDarkMode,
                 },
+                {
+                    icon: "language-outline",
+                    label: "اللغة",
+                    action: () => router.push("/profile/language"),
+                },
             ],
         },
         {
-            title: "عام",
+            title: "الخصوصية",
             items: [
                 {
                     icon: "shield-checkmark-outline",
@@ -112,9 +88,21 @@ export default function Settings() {
                     action: () => router.push("/profile/privacy"),
                 },
                 {
+                    icon: "eye-outline",
+                    label: "حساب خاص",
+                    isToggle: true,
+                    value: privacyMode,
+                    onToggle: setPrivacyMode,
+                },
+            ],
+        },
+        {
+            title: "الدعم",
+            items: [
+                {
                     icon: "help-circle-outline",
-                    label: "المساعدة والدعم",
-                    action: () => router.push("/profile/support"),
+                    label: "المساعدة",
+                    action: () => router.push("/profile/help"),
                 },
                 {
                     icon: "information-circle-outline",
@@ -137,71 +125,44 @@ export default function Settings() {
     ];
 
     return (
-        <ScrollView
-            style={styles.container}
-            showsVerticalScrollIndicator={false}
-        >
-            {/* الهيدر */}
+        <ScrollView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity
-                    onPress={handleBack}
+                    onPress={() => router.back()}
                     style={styles.backButton}
                 >
                     <Ionicons name="arrow-back" size={24} color="#007AFF" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>الإعدادات</Text>
-                <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={handleBack}
-                >
-                    <Ionicons name="close" size={24} color="#8E8E93" />
-                </TouchableOpacity>
+                <View style={{ width: 40 }} />
             </View>
 
-            {/* أقسام الإعدادات */}
-            {settingsOptions.map((section, sectionIndex) => (
-                <View key={sectionIndex} style={styles.section}>
+            {settingsSections.map((section, idx) => (
+                <View key={idx} style={styles.section}>
                     <Text style={styles.sectionTitle}>{section.title}</Text>
                     <View style={styles.sectionContent}>
-                        {section.items.map((item, itemIndex) => (
+                        {section.items.map((item, i) => (
                             <TouchableOpacity
-                                key={itemIndex}
-                                style={styles.settingItem}
-                                onPress={() => {
-                                    console.log(
-                                        "Settings action invoked:",
-                                        item?.label,
-                                    );
-                                    if (
-                                        item &&
-                                        typeof item.action === "function"
-                                    ) {
-                                        try {
-                                            item.action();
-                                        } catch (e) {
-                                            console.warn("Action error:", e);
-                                        }
-                                    }
-                                }}
-                                disabled={!!item.isToggle}
+                                key={i}
+                                style={styles.item}
+                                onPress={item.action}
+                                disabled={item.isToggle}
                             >
-                                <View style={styles.settingLeft}>
+                                <View style={styles.itemLeft}>
                                     <Ionicons
                                         name={item.icon}
                                         size={22}
                                         color={item.color || "#007AFF"}
-                                        style={styles.settingIcon}
                                     />
                                     <Text
                                         style={[
-                                            styles.settingLabel,
+                                            styles.itemLabel,
                                             item.color && { color: item.color },
                                         ]}
                                     >
                                         {item.label}
                                     </Text>
                                 </View>
-
                                 {item.isToggle ? (
                                     <Switch
                                         value={item.value}
@@ -229,10 +190,7 @@ export default function Settings() {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#F2F2F7",
-    },
+    container: { flex: 1, backgroundColor: "#F2F2F7" },
     header: {
         flexDirection: "row",
         alignItems: "center",
@@ -241,23 +199,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 60,
         paddingBottom: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: "#E5E5EA",
     },
-    backButton: {
-        padding: 5,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: "600",
-        color: "#1D1D1F",
-    },
-    closeButton: {
-        padding: 5,
-    },
-    section: {
-        marginTop: 25,
-    },
+    backButton: { padding: 5 },
+    headerTitle: { fontSize: 20, fontWeight: "600", color: "#1D1D1F" },
+    section: { marginTop: 25 },
     sectionTitle: {
         fontSize: 14,
         color: "#8E8E93",
@@ -271,7 +216,7 @@ const styles = StyleSheet.create({
         marginHorizontal: 20,
         overflow: "hidden",
     },
-    settingItem: {
+    item: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
@@ -279,17 +224,6 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: "#F2F2F7",
     },
-    settingLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        flex: 1,
-    },
-    settingIcon: {
-        marginRight: 12,
-    },
-    settingLabel: {
-        fontSize: 16,
-        color: "#1D1D1F",
-        flex: 1,
-    },
+    itemLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
+    itemLabel: { fontSize: 16, color: "#1D1D1F", marginLeft: 12 },
 });

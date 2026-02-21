@@ -22,8 +22,11 @@ export default function Profile({ navigate, params }) {
         description: "",
         shortDescription: "",
         category: "web",
+        tags: [],
+        technologies: [],
         demoUrl: "",
         githubUrl: "",
+        isPublic: true,
         images: [],
     });
     const [projLoading, setProjLoading] = useState(false);
@@ -92,7 +95,6 @@ export default function Profile({ navigate, params }) {
                 }
             } catch (err) {
                 if (!mounted) return;
-                // On error, reset viewUser and userProjects
                 setViewUser(null);
                 setUserProjects([]);
                 console.error("Error loading profile data", err);
@@ -120,7 +122,6 @@ export default function Profile({ navigate, params }) {
         setError(null);
         setLoading(true);
         try {
-            // Admins can only update name and bio
             let payload;
             if (user?.role === "admin") {
                 payload = { name: form.name, bio: form.bio };
@@ -208,13 +209,20 @@ export default function Profile({ navigate, params }) {
                             setProjError("العنوان مطلوب");
                             return;
                         }
+                        if (
+                            !projForm.description ||
+                            projForm.description.trim().length === 0
+                        ) {
+                            setProjError("الوصف الطويل مطلوب");
+                            return;
+                        }
                         setProjLoading(true);
                         try {
                             const formData = new FormData();
                             formData.append("title", projForm.title);
                             formData.append(
                                 "description",
-                                projForm.description || "",
+                                projForm.description,
                             );
                             formData.append(
                                 "shortDescription",
@@ -228,23 +236,60 @@ export default function Profile({ navigate, params }) {
                                     "githubUrl",
                                     projForm.githubUrl,
                                 );
+
+                            // إرسال tags كمصفوفة (كل عنصر على حدة)
+                            if (projForm.tags && Array.isArray(projForm.tags)) {
+                                projForm.tags.forEach((tag) =>
+                                    formData.append("tags", tag),
+                                );
+                            }
+
+                            // إرسال technologies كمصفوفة
+                            if (
+                                projForm.technologies &&
+                                Array.isArray(projForm.technologies)
+                            ) {
+                                projForm.technologies.forEach((tech) =>
+                                    formData.append("technologies", tech),
+                                );
+                            }
+
+                            // إرسال isPublic (اختياري)
+                            formData.append(
+                                "isPublic",
+                                projForm.isPublic ? "true" : "false",
+                            );
+
+                            // إضافة الصور
                             for (const file of projForm.images || []) {
                                 formData.append("images", file);
                             }
+
+                            // طباعة محتوى formData للتأكد
+                            for (let pair of formData.entries()) {
+                                console.log(pair[0] + ": " + pair[1]);
+                            }
+
                             const res = await projectsAPI.create(formData);
                             const created = res.data || res;
                             setShowProjectModal(false);
                             if (created && created._id) {
-                                navigate &&
-                                    navigate("project", { id: created._id });
+                                window.location.href = `/project/${created._id}`;
                             } else {
                                 alert("تم إنشاء المشروع بنجاح");
                             }
                         } catch (err) {
-                            setProjError(
-                                err.response?.data?.message ||
-                                    "حدث خطأ أثناء إنشاء المشروع",
+                            console.error("Full error object:", err);
+                            console.error(
+                                "Error response data:",
+                                err.response?.data,
                             );
+                            const errorMsg =
+                                err.response?.data?.message ||
+                                err.response?.data?.error ||
+                                err.message ||
+                                "حدث خطأ أثناء إنشاء المشروع";
+                            setProjError(errorMsg);
                         } finally {
                             setProjLoading(false);
                         }

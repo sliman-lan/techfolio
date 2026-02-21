@@ -37,13 +37,33 @@ const usersAPI = {
 };
 
 const projectsAPI = {
-    // accept optional params object: { userId, category, ... }
+    // الحصول على قائمة المشاريع العامة (المقبولة فقط)
     list: (params) => api.get("/projects", { params }),
+
+    // الحصول على مشروع معين (يجب أن يكون مقبولاً)
     get: (id) => api.get(`/projects/${id}`),
+
+    // إنشاء مشروع جديد (للمستخدمين العاديين)
     create: (formData) => api.post("/projects", formData),
+
+    // حذف مشروع (للمالك أو المشرف)
     delete: (id) => api.delete(`/projects/${id}`),
+
+    // تقييم مشروع (للمعلمين)
     rate: (id, payload) => api.post(`/projects/${id}/rate`, payload),
+
+    // الحصول على جميع المشاريع (للمشرف فقط)
     adminList: () => api.get("/projects/admin/all"),
+
+    // الحصول على مشاريع المستخدم الحالي (بما في ذلك المعلقة والمرفوضة)
+    getMyProjects: () => api.get("/projects/my"),
+
+    // الحصول على المشاريع المعلقة (للمشرف فقط)
+    getPendingProjects: () => api.get("/projects/admin/pending"),
+
+    // مراجعة مشروع (قبول أو رفض) - للمشرف فقط
+    reviewProject: (id, action, rejectionReason) =>
+        api.put(`/projects/${id}/review`, { action, rejectionReason }),
 };
 
 const commentAPI = {

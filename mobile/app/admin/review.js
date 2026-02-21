@@ -25,7 +25,7 @@ export default function MyProjects() {
     const loadProjects = async () => {
         try {
             const res = await projectsAPI.getMyProjects();
-            // res.data هي المصفوفة
+            // توقع أن تكون البيانات في res.data (مصفوفة)
             setProjects(res.data || []);
         } catch (error) {
             Alert.alert("خطأ", "فشل تحميل المشاريع");
@@ -34,6 +34,7 @@ export default function MyProjects() {
             setRefreshing(false);
         }
     };
+
     useFocusEffect(
         useCallback(() => {
             loadProjects();
