@@ -1,5 +1,5 @@
-// app/profile/followers.js - صفحة المتابعين
-import React, { useState, useEffect, useCallback } from "react";
+// app/profile/followers.js
+import React, { useState, useEffect } from "react";
 import {
     View,
     Text,
@@ -11,8 +11,7 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { followAPI, usersAPI } from "../../src/services/api";
+import { followAPI } from "../../src/services/api";
 
 export default function FollowersScreen() {
     const router = useRouter();
@@ -21,51 +20,54 @@ export default function FollowersScreen() {
 
     const [followers, setFollowers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [currentUser, setCurrentUser] = useState(null);
-
-    const loadFollowers = useCallback(async () => {
-        try {
-            setLoading(true);
-
-            // جلب المستخدم الحالي
-            const userString = await AsyncStorage.getItem("user");
-            if (userString) {
-                setCurrentUser(JSON.parse(userString));
-            }
-
-            // جلب المتابعين
-            const response = await followAPI.getFollowers(
-                userId || currentUser?._id,
-            );
-            setFollowers(response.followers || []);
-        } catch (error) {
-            console.error("❌ خطأ في جلب المتابعين:", error);
-        } finally {
-            setLoading(false);
-        }
-    }, [userId]);
 
     useEffect(() => {
         loadFollowers();
-    }, [loadFollowers]);
+    }, [userId]);
 
-    const renderFollower = ({ item }) => (
-        <TouchableOpacity
-            style={styles.followerItem}
-            onPress={() => router.push(`/profile?userId=${item._id}`)}
-        >
-            <View style={styles.followerAvatar}>
-                <Text style={styles.followerAvatarText}>
-                    {item.name?.charAt(0) || "م"}
-                </Text>
-            </View>
-            <View style={styles.followerInfo}>
-                <Text style={styles.followerName}>{item.name}</Text>
-                <Text style={styles.followerEmail}>{item.email}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
-        </TouchableOpacity>
-    );
+    const loadFollowers = async () => {
+        try {
+            setLoading(true);
+            const response = await followAPI.getFollowers(userId);
+            // الباك إند يعيد مصفوفة مباشرة أو داخل data
+            const followersData =
+                response.data || response.followers || response;
+            setFollowers(Array.isArray(followersData) ? followersData : []);
+        } catch (error) {
+            console.error("❌ خطأ في جلب المتابعين:", error);
+            setFollowers([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const renderFollower = ({ item }) => {
+        const follower = item.follower || item; // حسب بنية الاستجابة
+        return (
+            <TouchableOpacity
+                style={styles.followerItem}
+                onPress={() => router.push(`/profile?userId=${follower._id}`)}
+            >
+                <View style={styles.followerAvatar}>
+                    {follower.avatar ? (
+                        <Image
+                            source={{ uri: follower.avatar }}
+                            style={styles.avatarImage}
+                        />
+                    ) : (
+                        <Text style={styles.followerAvatarText}>
+                            {follower.name?.charAt(0) || "م"}
+                        </Text>
+                    )}
+                </View>
+                <View style={styles.followerInfo}>
+                    <Text style={styles.followerName}>{follower.name}</Text>
+                    <Text style={styles.followerEmail}>{follower.email}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
+            </TouchableOpacity>
+        );
+    };
 
     if (loading) {
         return (
@@ -77,11 +79,10 @@ export default function FollowersScreen() {
 
     return (
         <View style={styles.container}>
-            {/* الهيدر */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
-                    onPress={() => router.push("/profile")}
+                    onPress={() => router.back()}
                 >
                     <Ionicons name="arrow-back" size={24} color="#007AFF" />
                 </TouchableOpacity>
@@ -89,27 +90,23 @@ export default function FollowersScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            {/* عدد المتابعين */}
             <View style={styles.countContainer}>
                 <Text style={styles.countText}>{followers.length} متابع</Text>
             </View>
 
-            {/* قائمة المتابعين */}
             {followers.length > 0 ? (
                 <FlatList
                     data={followers}
                     renderItem={renderFollower}
-                    keyExtractor={(item) => item._id}
+                    keyExtractor={(item) =>
+                        item._id || Math.random().toString()
+                    }
                     contentContainerStyle={styles.listContainer}
-                    showsVerticalScrollIndicator={false}
                 />
             ) : (
                 <View style={styles.emptyContainer}>
                     <Ionicons name="people-outline" size={60} color="#C7C7CC" />
                     <Text style={styles.emptyText}>لا يوجد متابعون بعد</Text>
-                    <Text style={styles.emptySubtext}>
-                        شارك مشاريعك لجذب المتابعين
-                    </Text>
                 </View>
             )}
         </View>
@@ -169,6 +166,12 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
         marginRight: 15,
+        overflow: "hidden",
+    },
+    avatarImage: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
     },
     followerAvatarText: {
         color: "#fff",
@@ -200,10 +203,5 @@ const styles = StyleSheet.create({
         color: "#8E8E93",
         marginTop: 20,
         marginBottom: 10,
-    },
-    emptySubtext: {
-        fontSize: 14,
-        color: "#C7C7CC",
-        textAlign: "center",
     },
 });

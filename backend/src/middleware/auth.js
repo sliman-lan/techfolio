@@ -1,7 +1,6 @@
 // backend/src/middleware/auth.js
 const jwt = require("jsonwebtoken");
-
-// تأكد من تحميل المتغيرات البيئية
+const User = require("../models/User");
 require("dotenv").config({
     path: require("path").resolve(__dirname, "../../.env"),
 });
@@ -9,14 +8,12 @@ require("dotenv").config({
 console.log("🔐 تهيئة middleware المصادقة...");
 console.log("🔐 JWT_SECRET:", process.env.JWT_SECRET ? "محدد" : "غير محدد");
 
-const User = require("../models/User");
-
 const protect = async (req, res, next) => {
     console.log("\n=== 🔒 مصادقة طلب ===");
     console.log(`📨 ${req.method} ${req.originalUrl}`);
 
     try {
-        // 1. التحقق من وجود التوكن
+        // التحقق من وجود رأس Authorization
         if (!req.headers.authorization) {
             console.log("❌ لا يوجد رأس Authorization");
             return res.status(401).json({
@@ -25,7 +22,6 @@ const protect = async (req, res, next) => {
             });
         }
 
-        // 2. استخراج التوكن
         const authHeader = req.headers.authorization;
         if (!authHeader.startsWith("Bearer ")) {
             console.log('❌ التنسيق غير صحيح. يجب أن يبدأ بـ "Bearer "');
@@ -35,8 +31,8 @@ const protect = async (req, res, next) => {
             });
         }
 
+        // استخراج التوكن
         const token = authHeader.split(" ")[1];
-
         if (!token) {
             console.log('❌ التوكن فارغ بعد "Bearer"');
             return res.status(401).json({
@@ -48,7 +44,7 @@ const protect = async (req, res, next) => {
         console.log("🔑 التوكن المستلم:", token.substring(0, 30) + "...");
         console.log("📏 طول التوكن:", token.length);
 
-        // 3. التحقق من JWT_SECRET
+        // التحقق من JWT_SECRET
         if (!process.env.JWT_SECRET) {
             console.error("❌ خطأ جسيم: JWT_SECRET غير محدد في البيئة");
             return res.status(500).json({
@@ -57,29 +53,25 @@ const protect = async (req, res, next) => {
             });
         }
 
-        // 4. التحقق من التوكن مع معالجة الأخطاء
-        console.log("🔐 جاري التحقق من التوكن...");
-        console.log("🔐 طول JWT_SECRET:", process.env.JWT_SECRET.length);
-
+        // التحقق من التوكن
         try {
-            // محاولة التحقق مع خوارزمية محددة
             const decoded = jwt.verify(token, process.env.JWT_SECRET, {
                 algorithms: ["HS256"],
             });
 
-            // Fetch the full user from DB so we have the role and other fields
+            // جلب المستخدم من قاعدة البيانات
             const userFromDb = await User.findById(decoded.id).select(
                 "-password",
             );
             if (!userFromDb) {
-                return res
-                    .status(401)
-                    .json({ success: false, message: "المستخدم غير موجود" });
+                return res.status(401).json({
+                    success: false,
+                    message: "المستخدم غير موجود",
+                });
             }
 
             req.user = userFromDb;
-            // ensure common aliases exist
-            req.user._id = userFromDb._id;
+            req.user._id = userFromDb._id; // للتأكد من وجود _id
 
             next();
         } catch (jwtError) {
@@ -95,23 +87,16 @@ const protect = async (req, res, next) => {
                     success: false,
                     message: "التوكن غير صالح",
                     error: jwtError.message,
-                    debug: {
-                        tokenPreview: token.substring(0, 50),
-                        secretLength: process.env.JWT_SECRET?.length,
-                        decoded: decodedWithoutVerify,
-                    },
                 });
             } else if (jwtError.name === "TokenExpiredError") {
                 return res.status(401).json({
                     success: false,
                     message: "انتهت صلاحية التوكن",
-                    error: jwtError.message,
                 });
             } else {
                 return res.status(401).json({
                     success: false,
                     message: "خطأ في المصادقة",
-                    error: jwtError.message,
                 });
             }
         }
@@ -120,7 +105,6 @@ const protect = async (req, res, next) => {
         return res.status(500).json({
             success: false,
             message: "خطأ داخلي في الخادم",
-            error: error.message,
         });
     }
 };

@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const Project = require("../models/Project");
@@ -84,6 +85,28 @@ router.get("/admin/all", protect, isAdmin, async (req, res) => {
     }
 });
 
+// @route   GET /api/projects/featured
+// @desc    الحصول على المشاريع المميزة
+// @access  Public
+router.get("/featured", async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 6;
+
+        const featuredProjects = await Project.find({
+            status: "approved",
+            isFeatured: true,
+        })
+            .populate("userId", "name avatar")
+            .sort({ createdAt: -1 })
+            .limit(limit);
+
+        res.json(featuredProjects);
+    } catch (error) {
+        console.error("❌ Error fetching featured projects:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
 // ========== المسارات الديناميكية (تأتي بعد الثابتة) ==========
 router.get("/:id", async (req, res) => {
     try {
@@ -152,54 +175,141 @@ router.post(
     },
 );
 
+// @route   PUT /api/projects/:id
+// @desc    تحديث مشروع
+// @access  Private (owner only)
 router.put("/:id", protect, upload.array("images", 6), async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
-        if (!project)
+        if (!project) {
             return res.status(404).json({ message: "المشروع غير موجود" });
+        }
+
+        // التحقق من أن المستخدم هو المالك
         if (project.userId.toString() !== req.user._id.toString()) {
             return res
                 .status(403)
                 .json({ message: "غير مصرح لك بتعديل هذا المشروع" });
         }
-        if (project.status !== "pending") {
-            return res
-                .status(400)
-                .json({ message: "لا يمكن تعديل مشروع تمت مراجعته" });
-        }
-        Object.assign(project, req.body);
-        if (req.files?.length) {
-            const baseUrl = `${req.protocol}://${req.get("host")}`;
-            project.images.push(
-                ...req.files.map((f) => `${baseUrl}/uploads/${f.filename}`),
-            );
-        }
-        const updated = await project.save();
-        res.json(updated);
-    } catch (error) {
-        res.status(400).json({ message: error.message });
-    }
-});
 
-router.delete("/:id", protect, async (req, res) => {
-    try {
-        const project = await Project.findById(req.params.id);
-        if (!project)
-            return res.status(404).json({ message: "المشروع غير موجود" });
-        const isOwner = project.userId.toString() === req.user._id.toString();
-        const isAdmin = req.user.role === "admin";
-        if (!isOwner && !isAdmin) {
-            return res
-                .status(403)
-                .json({ message: "غير مصرح بحذف هذا المشروع" });
+        // تخزين الصور القديمة لحذفها لاحقاً
+        const oldImages = [...project.images];
+
+        // تحديث الحقول النصية
+        const allowedUpdates = [
+            "title",
+            "description",
+            "shortDescription",
+            "category",
+            "level",
+            "demoUrl",
+            "githubUrl",
+            "videoUrl",
+            "tags",
+            "technologies",
+            "isPublic",
+            "status",
+        ];
+
+        allowedUpdates.forEach((field) => {
+            if (req.body[field] !== undefined) {
+                // معالجة خاصة للمصفوفات
+                if (field === "tags" || field === "technologies") {
+                    try {
+                        project[field] = JSON.parse(req.body[field]);
+                    } catch {
+                        project[field] = req.body[field];
+                    }
+                } else {
+                    project[field] = req.body[field];
+                }
+            }
+        });
+
+        // معالجة الصور الموجودة (التي يريد المستخدم الاحتفاظ بها)
+        const imagesToKeep = req.body.existingImages
+            ? JSON.parse(req.body.existingImages)
+            : [];
+
+        // الصور التي سيتم الاحتفاظ بها
+        project.images = imagesToKeep;
+
+        // إضافة الصور الجديدة
+        if (req.files && req.files.length > 0) {
+            const baseUrl = `${req.protocol}://${req.get("host")}`;
+            const newImages = req.files.map(
+                (f) => `${baseUrl}/uploads/${f.filename}`,
+            );
+            project.images = [...project.images, ...newImages];
         }
-        await project.remove();
-        res.json({ message: "تم الحذف بنجاح" });
+
+        // حفظ المشروع أولاً للتأكد من نجاح العملية
+        const updatedProject = await project.save();
+
+        // بعد حفظ المشروع بنجاح، حذف الصور القديمة التي لم يعد لها وجود
+        if (oldImages.length > 0) {
+            const imagesToDelete = oldImages.filter(
+                (oldImg) =>
+                    !project.images.includes(oldImg) &&
+                    !oldImg.includes("default-project"), // لا تحذف الصور الافتراضية
+            );
+
+            imagesToDelete.forEach((imgUrl) => {
+                // استخراج اسم الملف من الرابط
+                const filename = imgUrl.split("/").pop();
+                const filePath = path.join(
+                    __dirname,
+                    "..",
+                    "uploads",
+                    filename,
+                );
+
+                // حذف الملف من المجلد
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                    console.log(`🗑️ تم حذف الصورة: ${filename}`);
+                }
+            });
+        }
+
+        res.json(updatedProject);
     } catch (error) {
+        console.error("❌ Error updating project:", error);
         res.status(500).json({ message: error.message });
     }
 });
+router.delete("/:id", protect, async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id);
 
+        if (!project) {
+            return res.status(404).json({ message: "المشروع غير موجود" });
+        }
+
+        // التحقق من الصلاحية (المالك أو المشرف)
+        const isOwner = project.userId.toString() === req.user._id.toString();
+        const isAdmin = req.user.role === "admin";
+
+        if (!isOwner && !isAdmin) {
+            return res
+                .status(403)
+                .json({ message: "غير مصرح لك بحذف هذا المشروع" });
+        }
+
+        // ✅ استخدم deleteOne() بدلاً من remove()
+        await project.deleteOne();
+        // أو يمكنك استخدام:
+        // await Project.findByIdAndDelete(req.params.id);
+
+        res.json({
+            success: true,
+            message: "تم حذف المشروع بنجاح",
+        });
+    } catch (error) {
+        console.error("❌ Error deleting project:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
 router.post("/:id/rate", protect, isTeacher, async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
@@ -227,12 +337,18 @@ router.post("/:id/rate", protect, isTeacher, async (req, res) => {
     }
 });
 
+// @route   PUT /api/projects/:id/review
+// @desc    مراجعة مشروع (قبول أو رفض)
+// @access  Private (Admin only)
 router.put("/:id/review", protect, isAdmin, async (req, res) => {
     try {
         const { action, rejectionReason } = req.body;
         const project = await Project.findById(req.params.id);
-        if (!project)
+
+        if (!project) {
             return res.status(404).json({ message: "المشروع غير موجود" });
+        }
+
         if (action === "approve") {
             project.status = "approved";
             project.rejectionReason = undefined;
@@ -242,13 +358,80 @@ router.put("/:id/review", protect, isAdmin, async (req, res) => {
         } else {
             return res.status(400).json({ message: "إجراء غير صالح" });
         }
+
         await project.save();
+
         res.json({
-            message: `تم ${action === "approve" ? "قبول" : "رفض"} المشروع`,
-            project,
+            success: true,
+            message: `تم ${action === "approve" ? "قبول" : "رفض"} المشروع بنجاح`,
+            data: project,
         });
     } catch (error) {
+        console.error("❌ Error in project review:", error);
         res.status(500).json({ message: error.message });
+    }
+});
+
+// @route   POST /api/projects/:id/views
+// @desc    زيادة عدد مشاهدات المشروع
+// @access  Public
+router.post("/:id/views", async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id);
+
+        if (!project) {
+            return res.status(404).json({
+                success: false,
+                message: "المشروع غير موجود",
+            });
+        }
+
+        // زيادة عدد المشاهدات
+        project.views = (project.views || 0) + 1;
+        project.lastViewed = Date.now();
+
+        await project.save();
+
+        res.json({
+            success: true,
+            message: "تم زيادة عدد المشاهدات",
+            views: project.views,
+        });
+    } catch (error) {
+        console.error("❌ Error incrementing views:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+});
+
+// @route   GET /api/projects/admin/:id
+// @desc    الحصول على مشروع معين (للمشرف - يشمل جميع الحالات)
+// @access  Private (Admin only)
+router.get("/admin/:id", protect, isAdmin, async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id)
+            .populate("userId", "name avatar email")
+            .populate("ratings.userId", "name");
+
+        if (!project) {
+            return res.status(404).json({
+                success: false,
+                message: "المشروع غير موجود",
+            });
+        }
+
+        res.json({
+            success: true,
+            data: project,
+        });
+    } catch (error) {
+        console.error("❌ Error fetching project for admin:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
     }
 });
 

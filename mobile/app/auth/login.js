@@ -13,7 +13,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { authAPI } from "../../src/services/api";
+import { authAPI, setAuthToken } from "../../src/services/api";
 
 export default function Login() {
     const router = useRouter();
@@ -23,133 +23,18 @@ export default function Login() {
     const [errors, setErrors] = useState({});
     const [generalError, setGeneralError] = useState("");
 
-    // const handleLogin = async () => {
-    //     // التحقق من صحة البيانات
-    //     const newErrors = {};
-    //     if (!email.trim()) newErrors.email = "البريد الإلكتروني مطلوب";
-    //     else if (!/\S+@\S+\.\S+/.test(email))
-    //         newErrors.email = "صيغة البريد الإلكتروني غير صحيحة";
-    //     if (!password.trim()) newErrors.password = "كلمة المرور مطلوبة";
-
-    //     if (Object.keys(newErrors).length > 0) {
-    //         setErrors(newErrors);
-    //         return;
-    //     }
-
-    //     setLoading(true);
-    //     setErrors({});
-    //     setGeneralError("");
-
-    //     try {
-    //         console.log("🔄 جاري تسجيل الدخول...", { email });
-    //         const response = await authAPI.login({ email, password });
-
-    //         console.log("🔍 تحليل الاستجابة:", {
-    //             هيكل_الاستجابة: Object.keys(response.data),
-    //             هل_يوجد_success: !!response.data.success,
-    //             هل_يوجد_data: !!response.data.data,
-    //             محتوى_data: response.data.data
-    //                 ? Object.keys(response.data.data)
-    //                 : "غير موجود",
-    //             هل_يوجد_token_في_data: !!response.data.data?.token,
-    //             هل_يوجد_token_في_المستوى_الرئيسي: !!response.data.token,
-    //         });
-
-    //         // 🔑 الحل: البحث عن التوكن في جميع الأماكن الممكنة
-    //         let token = null;
-    //         let userData = {};
-
-    //         // البحث في جميع المواقع الممكنة للتوكن
-    //         const possibleTokenLocations = [
-    //             response.data.data?.token, // { success, data: { token } }
-    //             response.data.token, // { token }
-    //             response.data.data?.accessToken, // { success, data: { accessToken } }
-    //             response.data.accessToken, // { accessToken }
-    //             response.data.jwt, // { jwt }
-    //             response.headers?.["authorization"]?.replace("Bearer ", ""),
-    //             response.headers?.["x-auth-token"],
-    //         ];
-
-    //         token = possibleTokenLocations.find(
-    //             (t) => t && typeof t === "string" && t.length > 20,
-    //         );
-
-    //         // استخراج بيانات المستخدم
-    //         if (response.data.data && response.data.data._id) {
-    //             userData = {
-    //                 _id: response.data.data._id,
-    //                 name: response.data.data.name || "",
-    //                 email: response.data.data.email || "",
-    //                 role: response.data.data.role || "student",
-    //             };
-    //         } else if (response.data._id) {
-    //             userData = {
-    //                 _id: response.data._id,
-    //                 name: response.data.name || "",
-    //                 email: response.data.email || "",
-    //                 role: response.data.role || "student",
-    //             };
-    //         }
-
-    //         // التحقق من وجود التوكن
-    //         if (!token) {
-    //             console.error("❌ خطأ حرج: التوكن مفقود تماماً في الاستجابة!");
-    //             console.error(
-    //                 "💡 الحل الفوري: تأكد من وجود هذا السطر في backend/routes/auth.js:",
-    //             );
-    //             console.error(
-    //                 "   token: generateToken(user._id), // داخل كائن data",
-    //             );
-
-    //             throw new Error(
-    //                 "الخادم لم يُرجع رمز المصادقة. يرجى مراجعة كود الـ Backend في ملف auth.js",
-    //             );
-    //         }
-
-    //         // 🔑 حفظ البيانات بشكل صحيح
-    //         await AsyncStorage.setItem("authToken", token);
-    //         await AsyncStorage.setItem("user", JSON.stringify(userData));
-
-    //         console.log("✅ تم تسجيل الدخول بنجاح");
-    //         console.log("👤 المستخدم:", userData);
-    //         console.log("🔑 التوكن (20 حرف):", token.substring(0, 20) + "...");
-
-    //         // التوجيه إلى الصفحة الرئيسية
-    //         router.replace("/tabs");
-    //     } catch (error) {
-    //         console.error("❌ خطأ في تسجيل الدخول:", {
-    //             رسالة: error.message,
-    //             تفاصيل: error.response?.data || error.config?.url,
-    //         });
-
-    //         let errorMessage = "حدث خطأ أثناء تسجيل الدخول";
-
-    //         if (error.response) {
-    //             if (error.response.status === 401) {
-    //                 errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة";
-    //             } else if (error.response.status === 400) {
-    //                 errorMessage =
-    //                     error.response.data?.message || "بيانات غير صحيحة";
-    //             } else if (error.response.status === 500) {
-    //                 errorMessage = "خطأ في الخادم. يرجى المحاولة لاحقاً";
-    //             } else {
-    //                 errorMessage =
-    //                     error.response.data?.message || "خطأ غير متوقع";
-    //             }
-    //         } else if (error.request) {
-    //             errorMessage = "تعذر الاتصال بالخادم. تحقق من اتصال الإنترنت";
-    //         }
-
-    //         setGeneralError(errorMessage);
-    //         Alert.alert("خطأ في تسجيل الدخول", errorMessage);
-    //     } finally {
-    //         setLoading(false);
-    //     }
-    // };
-
-    // استبدل الكود المعقد في handleLogin بـ:
     const handleLogin = async () => {
-        // ... التحقق من الصحة
+        // التحقق من صحة البيانات
+        const newErrors = {};
+        if (!email.trim()) newErrors.email = "البريد الإلكتروني مطلوب";
+        else if (!/\S+@\S+\.\S+/.test(email))
+            newErrors.email = "صيغة البريد الإلكتروني غير صحيحة";
+        if (!password.trim()) newErrors.password = "كلمة المرور مطلوبة";
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            return;
+        }
 
         setLoading(true);
         setErrors({});
@@ -158,20 +43,50 @@ export default function Login() {
         try {
             console.log("🔄 جاري تسجيل الدخول...", { email });
 
-            // استخدم authAPI.login الجديدة
-            const result = await authAPI.login({ email, password });
+            // 1. استدعاء API تسجيل الدخول
+            const response = await authAPI.login({ email, password });
 
-            console.log("✅ تسجيل الدخول ناجح:", {
-                userId: result.data._id,
-                tokenLength: result.token?.length,
+            console.log("📦 تحليل الاستجابة:", {
+                keys: Object.keys(response),
+                hasSuccess: response.success,
+                hasData: !!response.data,
+                dataKeys: response.data ? Object.keys(response.data) : [],
             });
 
-            // التوجيه إلى الصفحة الرئيسية
+            // 2. استخراج التوكن وبيانات المستخدم من الاستجابة
+            // التنسيق المتوقع: { success: true, data: { token, _id, name, email, role } }
+            const userData = response.data; // المستخدم مع التوكن
+            const token = userData?.token;
+
+            if (!token) {
+                console.error("❌ التوكن غير موجود في userData", userData);
+                throw new Error("لم يتم استلام رمز المصادقة من الخادم");
+            }
+
+            console.log("✅ تسجيل الدخول ناجح:", {
+                userId: userData._id,
+                name: userData.name,
+                tokenLength: token.length,
+            });
+
+            // 3. حفظ التوكن في AsyncStorage (عبر الدالة المخصصة)
+            await setAuthToken(token);
+
+            // 4. حفظ بيانات المستخدم في AsyncStorage (بدون التوكن)
+            const { token: _, ...userWithoutToken } = userData;
+            await AsyncStorage.setItem(
+                "user",
+                JSON.stringify(userWithoutToken),
+            );
+
+            console.log("✅ تم حفظ التوكن والمستخدم");
+
+            // 5. التوجيه إلى الصفحة الرئيسية
             router.replace("/tabs");
         } catch (error) {
             console.error("❌ خطأ في تسجيل الدخول:", error.message);
 
-            let errorMessage = "حدث خطأ أثناء تسجيل الدخول";
+            let errorMessage = error.message || "حدث خطأ أثناء تسجيل الدخول";
 
             if (error.response) {
                 if (error.response.status === 401) {
@@ -179,6 +94,9 @@ export default function Login() {
                 } else if (error.response.status === 400) {
                     errorMessage =
                         error.response.data?.message || "بيانات غير صحيحة";
+                } else {
+                    errorMessage =
+                        error.response.data?.message || "خطأ في الخادم";
                 }
             } else if (error.request) {
                 errorMessage = "تعذر الاتصال بالخادم. تحقق من اتصال الإنترنت";

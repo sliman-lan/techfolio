@@ -1,161 +1,152 @@
-// mobile/src/context/AuthContext.js
+// src/context/AuthContext.js
 import React, { createContext, useState, useContext, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { authAPI, usersAPI } from "../services/api";
-import { router } from "expo-router";
+import { authAPI, setAuthToken } from "../services/api";
 
-// إنشاء السياق
 const AuthContext = createContext({});
-
-// خطاف لاستخدام السياق
 export const useAuth = () => useContext(AuthContext);
 
-// مزود السياق
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-    // دالة مسح بيانات المصادقة من التخزين
-    const clearAuthStorage = async () => {
-        try {
-            await AsyncStorage.removeItem("authToken");
-            await AsyncStorage.removeItem("user");
-            console.log("✅ تم مسح authToken و user من AsyncStorage");
-        } catch (e) {
-            console.warn("⚠️ فشل مسح AsyncStorage:", e);
-        }
-    };
-
-    // تحميل المستخدم من التخزين عند بدء التشغيل
     useEffect(() => {
         const loadStoredUser = async () => {
             setIsCheckingAuth(true);
             try {
                 const token = await AsyncStorage.getItem("authToken");
                 const userStr = await AsyncStorage.getItem("user");
+                console.log(
+                    "📦 loadStoredUser: token from storage:",
+                    token ? "موجود" : "غير موجود",
+                );
+                console.log(
+                    "📦 loadStoredUser: user from storage:",
+                    userStr ? "موجود" : "غير موجود",
+                );
 
                 if (token && userStr) {
-                    const parsedUser = JSON.parse(userStr);
-                    setUser(parsedUser);
-                    console.log(
-                        "✅ تم تحميل المستخدم من التخزين:",
-                        parsedUser.name,
-                    );
-
-                    // محاولة تحديث بيانات المستخدم من الخادم للتأكد من حداثتها
                     try {
-                        const profileRes = await usersAPI.getProfile();
-                        // قد تكون الاستجابة مباشرة أو داخل data
-                        const serverUser = profileRes.data || profileRes;
-                        if (serverUser && serverUser._id === parsedUser._id) {
-                            setUser(serverUser);
-                            await AsyncStorage.setItem(
-                                "user",
-                                JSON.stringify(serverUser),
-                            );
-                            console.log(
-                                "✅ تم تحديث بيانات المستخدم من الخادم",
-                            );
-                        }
-                    } catch (e) {
+                        const parsedUser = JSON.parse(userStr);
+                        setUser(parsedUser);
+                        await setAuthToken(token); // تحديث الكاش
                         console.log(
-                            "⚠️ فشل تحديث بيانات المستخدم من الخادم، نستخدم المحلية",
+                            "📦 loadStoredUser: تم تحميل المستخدم والتوكن",
                         );
+                    } catch (e) {
+                        console.error(
+                            "📦 loadStoredUser: خطأ في تحليل user JSON",
+                            e,
+                        );
+                        // إذا كان userStr غير صالح، نقوم بتسجيل الخروج
+                        await setAuthToken(null);
+                        await AsyncStorage.removeItem("user");
                     }
-                } else {
-                    console.log("ℹ️ لا يوجد مستخدم مخزن");
+                } else if (token) {
+                    // يوجد توكن ولكن لا يوجد مستخدم -> حالة غير متسقة، نسحبه
+                    console.log(
+                        "📦 loadStoredUser: يوجد توكن بدون مستخدم، سيتم إزالته",
+                    );
+                    await setAuthToken(null);
                 }
+                // إذا لم يكن هناك توكن، لا تفعل شيئًا
             } catch (e) {
-                console.error("❌ خطأ في تحميل المستخدم:", e);
+                console.error("❌ loadStoredUser error:", e);
             } finally {
                 setIsCheckingAuth(false);
             }
         };
+
         loadStoredUser();
     }, []);
 
-    // دالة تسجيل الدخول
     const login = async (email, password) => {
         setIsLoading(true);
         try {
+            console.log("🔄 جاري تسجيل الدخول...", { email });
             const response = await authAPI.login({ email, password });
-            if (response?.success && response?.data) {
-                const userData = response.data;
-                // حفظ التوكن والمستخدم
-                await AsyncStorage.setItem("authToken", userData.token);
-                await AsyncStorage.setItem("user", JSON.stringify(userData));
-                setUser(userData);
-                console.log("✅ تم تسجيل الدخول وحفظ المستخدم:", userData.name);
-                return { success: true };
+
+            if (!response?.success || !response?.data) {
+                return {
+                    success: false,
+                    error: "فشل تسجيل الدخول: استجابة غير صحيحة",
+                };
             }
-            return { success: false, error: "بيانات غير صحيحة" };
-        } catch (error) {
-            console.error("❌ خطأ في تسجيل الدخول:", error);
-            return { success: false, error: error.message };
+
+            const userData = response.data.data;
+            if (!userData || !userData.token) {
+                console.error(
+                    "❌ login: البيانات لا تحتوي على token",
+                    userData,
+                );
+                return {
+                    success: false,
+                    error: "بيانات تسجيل الدخول غير مكتملة",
+                };
+            }
+
+            const token = userData.token;
+            const { token: _, ...userWithoutToken } = userData;
+
+            console.log("✅ تسجيل الدخول ناجح:", {
+                userId: userData._id,
+                tokenLength: token.length,
+            });
+
+            // حفظ التوكن أولاً (يحدث الكاش و AsyncStorage)
+            await setAuthToken(token);
+            console.log("🔑 login: after setAuthToken");
+
+            // حفظ المستخدم
+            const userString = JSON.stringify(userWithoutToken);
+            await AsyncStorage.setItem("user", userString);
+            console.log(
+                "🔑 login: user saved to AsyncStorage, length:",
+                userString.length,
+            );
+
+            // تحديث الحالة
+            setUser(userWithoutToken);
+
+            return { success: true };
+        } catch (e) {
+            console.error("❌ login error:", e);
+            return {
+                success: false,
+                error: e.message || "حدث خطأ أثناء تسجيل الدخول",
+            };
         } finally {
             setIsLoading(false);
         }
     };
 
-    // دالة تسجيل جديد
-    const register = async (userData) => {
+    const logout = async () => {
         setIsLoading(true);
         try {
-            const response = await authAPI.register(userData);
-            if (response?.success && response?.data) {
-                const userData = response.data;
-                await AsyncStorage.setItem("authToken", userData.token);
-                await AsyncStorage.setItem("user", JSON.stringify(userData));
-                setUser(userData);
-                return { success: true };
-            }
-            return { success: false, error: "فشل التسجيل" };
-        } catch (error) {
-            return { success: false, error: error.message };
+            await setAuthToken(null); // إزالة التوكن من AsyncStorage والكاش
+            await AsyncStorage.removeItem("user");
+            setUser(null);
+            console.log("✅ logout: تم تسجيل الخروج");
+        } catch (e) {
+            console.error("❌ logout error:", e);
         } finally {
             setIsLoading(false);
         }
-    };
-
-    // دالة تسجيل الخروج (مضمونة)
-    const logout = async () => {
-        console.log("🔵 بدء تسجيل الخروج...");
-        setIsLoading(true);
-
-        // مسح البيانات المخزنة
-        await clearAuthStorage();
-        setUser(null);
-
-        // تأخير بسيط لضمان اكتمال المسح
-        setTimeout(() => {
-            try {
-                console.log("🔵 محاولة التنقل إلى /auth/login");
-                router.replace("/auth/login");
-            } catch (e) {
-                console.warn("⚠️ فشل التنقل عبر router، استخدام fallback:", e);
-                // إذا فشل التنقل عبر router (يحدث أحياناً على الويب)
-                if (typeof window !== "undefined") {
-                    window.location.href = "/auth/login";
-                }
-            } finally {
-                setIsLoading(false);
-            }
-        }, 100);
-    };
-
-    // قيمة السياق
-    const value = {
-        user,
-        setUser,
-        isLoading,
-        isCheckingAuth,
-        login,
-        register,
-        logout,
     };
 
     return (
-        <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+        <AuthContext.Provider
+            value={{
+                user,
+                setUser,
+                isLoading,
+                isCheckingAuth,
+                login,
+                logout,
+            }}
+        >
+            {children}
+        </AuthContext.Provider>
     );
 };

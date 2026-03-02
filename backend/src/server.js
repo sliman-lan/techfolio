@@ -4,6 +4,7 @@ const path = require("path");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
+const fs = require("fs");
 
 dotenv.config();
 connectDB();
@@ -17,16 +18,29 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// المسارات الثابتة
-app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+// التأكد من وجود المجلدات
+const uploadsDir = path.join(__dirname, "uploads");
+const avatarsDir = path.join(__dirname, "uploads", "avatars");
+
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log("📁 تم إنشاء مجلد uploads");
+}
+if (!fs.existsSync(avatarsDir)) {
+    fs.mkdirSync(avatarsDir, { recursive: true });
+    console.log("📁 تم إنشاء مجلد uploads/avatars");
+}
+
+// المسارات الثابتة - تأكد من المسار الصحيح
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+console.log("📁 Static files served from:", path.join(__dirname, "uploads"));
 
 // مسارات API
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api/projects", require("./routes/projects"));
 
-// like routes (project likes) - mounted under /api/projects so endpoints become
-// POST /api/projects/:projectId/like, DELETE /api/projects/:projectId/like, GET /api/projects/:projectId/like/status
+// like routes
 app.use("/api/projects", require("./routes/like"));
 app.use("/api/follow", require("./routes/follow"));
 app.use("/api/comments", require("./routes/comment"));
@@ -42,9 +56,22 @@ app.get("/api/test", (req, res) => {
     res.json({ status: "success", message: "API working" });
 });
 
+// endpoint تجريبي للصور
+app.get("/test-upload", (req, res) => {
+    const avatarsPath = path.join(__dirname, "uploads", "avatars");
+    const files = fs.readdirSync(avatarsPath);
+    res.json({
+        message: "Uploads folder",
+        avatarsPath,
+        files,
+        staticUrl: "/uploads/avatars/",
+    });
+});
+
 // تشغيل الخادم
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
-    console.log(`✅ CORS enabled for all origins`);
+    console.log(`✅ Uploads folder: ${path.join(__dirname, "uploads")}`);
+    console.log(`✅ Test uploads: http://localhost:${PORT}/test-upload`);
 });

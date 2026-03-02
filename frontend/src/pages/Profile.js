@@ -4,6 +4,7 @@ import { projectsAPI, usersAPI } from "../services/api";
 import ProfileSidebar from "../components/profile/ProfileSidebar";
 import ProfileProjects from "../components/profile/ProfileProjects";
 import AddProjectModal from "../components/profile/AddProjectModal";
+import EditProjectModal from "../components/profile/EditProjectModal";
 
 export default function Profile({ navigate, params }) {
     const { user, updateProfile } = useContext(AuthContext);
@@ -13,6 +14,7 @@ export default function Profile({ navigate, params }) {
         bio: "",
         skills: "",
         certifications: [],
+        socialLinks: { github: "", linkedin: "", twitter: "" },
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -36,32 +38,191 @@ export default function Profile({ navigate, params }) {
     const [userProjects, setUserProjects] = useState([]);
     const [adminStats, setAdminStats] = useState({
         total: 0,
-        rated: 0,
-        unrated: 0,
-        recent: [],
+        approved: 0,
+        pending: 0,
+        recentPending: [],
     });
 
-    // Populate form when logged-in user changes
+    const [editingProject, setEditingProject] = useState(null);
+    const [editProjectLoading, setEditProjectLoading] = useState(false);
+    const [editProjectError, setEditProjectError] = useState(null);
+
+    // تعيين المتغيرات العامة للتشخيص
     useEffect(() => {
-        setForm({
-            name: user?.name || "",
-            bio: user?.bio || "",
-            skills: Array.isArray(user?.skills)
-                ? user.skills.join(", ")
-                : user?.skills || "",
-            certifications: Array.isArray(user?.certifications)
-                ? user.certifications
-                : [],
-        });
+        if (user) {
+            window.currentUserId = user._id;
+            window.userRole = user.role;
+            console.log("✅ User set in window:", {
+                id: user._id,
+                role: user.role,
+            });
+        } else {
+            window.currentUserId = undefined;
+            window.userRole = undefined;
+        }
     }, [user]);
 
-    // Load profile data (other user) and projects
+    const handleEditProject = async (projectId) => {
+        console.log("🖱️ Edit clicked for project:", projectId);
+        try {
+            setEditProjectLoading(true);
+            const res = await projectsAPI.getForEdit(projectId);
+            const projectData = res.data?.data || res.data;
+            console.log("📦 Project data loaded:", projectData);
+            setEditingProject(projectData);
+        } catch (err) {
+            console.error("❌ فشل جلب بيانات المشروع للتعديل", err);
+            alert("حدث خطأ أثناء تحميل بيانات المشروع");
+        } finally {
+            setEditProjectLoading(false);
+        }
+    };
+
+    const handleSaveProject = async (updatedData, imagesToKeep) => {
+        setEditProjectError(null);
+        setEditProjectLoading(true);
+
+        try {
+            const formData = new FormData();
+
+            // إضافة الحقول النصية الأساسية
+            formData.append("title", updatedData.title);
+            formData.append("description", updatedData.description);
+            formData.append(
+                "shortDescription",
+                updatedData.shortDescription || "",
+            );
+            formData.append("category", updatedData.category);
+
+            // إضافة الحقول الاختيارية
+            if (updatedData.level) formData.append("level", updatedData.level);
+            if (updatedData.demoUrl)
+                formData.append("demoUrl", updatedData.demoUrl);
+            if (updatedData.githubUrl)
+                formData.append("githubUrl", updatedData.githubUrl);
+            if (updatedData.videoUrl)
+                formData.append("videoUrl", updatedData.videoUrl);
+
+            // isPublic
+            formData.append(
+                "isPublic",
+                updatedData.isPublic ? "true" : "false",
+            );
+
+            // معالجة الصور الموجودة - نرسلها كمصفوفة
+            if (imagesToKeep && imagesToKeep.length > 0) {
+                // يمكن إرسالها كـ JSON string
+                formData.append("existingImages", JSON.stringify(imagesToKeep));
+            }
+
+            // إضافة الصور الجديدة
+            if (updatedData.images && updatedData.images.length > 0) {
+                updatedData.images.forEach((file) => {
+                    formData.append("images", file); // استخدم "images" كما في الإضافة
+                });
+            }
+
+            // إضافة المصفوفات - نرسلها كـ JSON string
+            if (updatedData.tags && updatedData.tags.length > 0) {
+                formData.append("tags", JSON.stringify(updatedData.tags));
+            } else {
+                formData.append("tags", JSON.stringify([]));
+            }
+
+            if (
+                updatedData.technologies &&
+                updatedData.technologies.length > 0
+            ) {
+                formData.append(
+                    "technologies",
+                    JSON.stringify(updatedData.technologies),
+                );
+            } else {
+                formData.append("technologies", JSON.stringify([]));
+            }
+
+            // طباعة محتوى formData للتشخيص
+            console.log("📤 Sending FormData:");
+            for (let pair of formData.entries()) {
+                console.log(pair[0] + ": " + pair[1]);
+            }
+
+            await projectsAPI.update(editingProject._id, formData);
+
+            // إعادة تحميل المشاريع
+            const ownerId = params?.userId || user?._id;
+            const projRes = await projectsAPI.list({ userId: ownerId });
+            setUserProjects(projRes.data || []);
+
+            setEditingProject(null);
+            alert("✅ تم تحديث المشروع بنجاح");
+        } catch (err) {
+            console.error("❌ فشل تحديث المشروع", err);
+            console.error("❌ Error response:", err.response?.data);
+            setEditProjectError(
+                err.response?.data?.message || "حدث خطأ أثناء التحديث",
+            );
+        } finally {
+            setEditProjectLoading(false);
+        }
+    };
+
+    const handleAvatarUpload = async (file) => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const formData = new FormData();
+            formData.append("avatar", file);
+
+            console.log(
+                "📤 Uploading avatar:",
+                file.name,
+                file.type,
+                file.size,
+            );
+
+            const res = await usersAPI.updateProfile(formData);
+            console.log("📥 Upload response:", res.data);
+
+            // تحديث بيانات المستخدم
+            await updateProfile(res.data);
+
+            alert("✅ تم تحديث الصورة بنجاح");
+        } catch (err) {
+            console.error("❌ فشل تحديث الصورة:", err);
+            console.error("❌ Error response:", err.response?.data);
+            setError(err.response?.data?.message || "فشل تحديث الصورة");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (user) {
+            setForm({
+                name: user.name || "",
+                bio: user.bio || "",
+                skills: Array.isArray(user.skills)
+                    ? user.skills.join(", ")
+                    : user.skills || "",
+                certifications: Array.isArray(user.certifications)
+                    ? user.certifications
+                    : [],
+                socialLinks: {
+                    github: user.socialLinks?.github || "",
+                    linkedin: user.socialLinks?.linkedin || "",
+                    twitter: user.socialLinks?.twitter || "",
+                },
+            });
+        }
+    }, [user]);
+
     useEffect(() => {
         let mounted = true;
 
         async function loadData() {
             try {
-                // 1. Load other user's profile if userId param exists
                 if (params?.userId) {
                     const res = await usersAPI.getProfile(params.userId);
                     if (!mounted) return;
@@ -70,28 +231,41 @@ export default function Profile({ navigate, params }) {
                     setViewUser(null);
                 }
 
-                // 2. Load projects of the profile owner
                 const ownerId = params?.userId || user?._id;
                 if (ownerId) {
                     const projRes = await projectsAPI.list({ userId: ownerId });
                     if (!mounted) return;
                     setUserProjects(projRes.data || []);
+                    console.log(
+                        "📦 Projects loaded for user:",
+                        ownerId,
+                        projRes.data,
+                    );
                 } else {
                     setUserProjects([]);
                 }
 
-                // 3. If admin is viewing own profile, fetch overall stats
                 if (!params?.userId && user?.role === "admin") {
                     const statsRes = await projectsAPI.adminList();
                     if (!mounted) return;
                     const projects = statsRes.data?.data || statsRes.data || [];
                     const total = projects.length;
-                    const rated = projects.filter(
-                        (p) => Array.isArray(p.ratings) && p.ratings.length > 0,
+                    const approved = projects.filter(
+                        (p) => p.status === "approved",
                     ).length;
-                    const unrated = total - rated;
-                    const recent = projects.slice(0, 10);
-                    setAdminStats({ total, rated, unrated, recent });
+                    const pending = projects.filter(
+                        (p) => p.status === "pending",
+                    ).length;
+                    const recentPending = projects
+                        .filter((p) => p.status === "pending")
+                        .slice(0, 5);
+
+                    setAdminStats({
+                        total,
+                        approved,
+                        pending,
+                        recentPending,
+                    });
                 }
             } catch (err) {
                 if (!mounted) return;
@@ -108,7 +282,6 @@ export default function Profile({ navigate, params }) {
         };
     }, [params, user]);
 
-    // Open project modal if requested
     useEffect(() => {
         if (params?.openAddProject) {
             setShowProjectModal(true);
@@ -117,6 +290,47 @@ export default function Profile({ navigate, params }) {
 
     const handleChange = (e) =>
         setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+
+    const handleDeleteProject = async (projectId) => {
+        console.log("🗑️ Delete clicked for project:", projectId);
+
+        // تأكيد الحذف من المستخدم
+        if (
+            !window.confirm(
+                "هل أنت متأكد من حذف هذا المشروع؟ لا يمكن التراجع عن هذا الإجراء.",
+            )
+        ) {
+            return;
+        }
+
+        try {
+            // إظهار مؤشر تحميث (اختياري)
+            setLoading(true);
+
+            console.log("📤 Sending delete request...");
+            const res = await projectsAPI.delete(projectId);
+            console.log("📥 Delete response:", res);
+
+            // إعادة تحميل المشاريع بعد الحذف
+            const ownerId = params?.userId || user?._id;
+            const projRes = await projectsAPI.list({ userId: ownerId });
+            setUserProjects(projRes.data || []);
+
+            alert("✅ تم حذف المشروع بنجاح");
+        } catch (err) {
+            console.error("❌ فشل حذف المشروع:", err);
+            console.error("❌ Error response:", err.response?.data);
+
+            // رسالة خطأ مخصصة
+            const errorMsg =
+                err.response?.data?.message ||
+                err.message ||
+                "حدث خطأ أثناء حذف المشروع";
+            alert(`❌ ${errorMsg}`);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSave = async () => {
         setError(null);
@@ -138,6 +352,7 @@ export default function Profile({ navigate, params }) {
                     certifications: Array.isArray(form.certifications)
                         ? form.certifications
                         : [],
+                    socialLinks: form.socialLinks,
                 };
             }
 
@@ -151,6 +366,7 @@ export default function Profile({ navigate, params }) {
     };
 
     const isViewingOther = params?.userId && params.userId !== user?._id;
+
     if (!user && !isViewingOther) {
         return (
             <div className="alert alert-info">
@@ -176,6 +392,8 @@ export default function Profile({ navigate, params }) {
                         onSave={handleSave}
                         onCancelEdit={() => setEditing(false)}
                         onStartEdit={() => setEditing(true)}
+                        onAvatarUpload={handleAvatarUpload}
+                        navigate={navigate}
                     />
                 </div>
             </div>
@@ -187,6 +405,10 @@ export default function Profile({ navigate, params }) {
                     adminStats={adminStats}
                     onAddProject={() => setShowProjectModal(true)}
                     navigate={navigate}
+                    onEditProject={handleEditProject}
+                    onDeleteProject={handleDeleteProject}
+                    onApproveProject={(id) => console.log("Approve", id)}
+                    onRejectProject={(id) => console.log("Reject", id)}
                 />
             </div>
 
@@ -237,14 +459,12 @@ export default function Profile({ navigate, params }) {
                                     projForm.githubUrl,
                                 );
 
-                            // إرسال tags كمصفوفة (كل عنصر على حدة)
                             if (projForm.tags && Array.isArray(projForm.tags)) {
                                 projForm.tags.forEach((tag) =>
                                     formData.append("tags", tag),
                                 );
                             }
 
-                            // إرسال technologies كمصفوفة
                             if (
                                 projForm.technologies &&
                                 Array.isArray(projForm.technologies)
@@ -254,36 +474,28 @@ export default function Profile({ navigate, params }) {
                                 );
                             }
 
-                            // إرسال isPublic (اختياري)
                             formData.append(
                                 "isPublic",
                                 projForm.isPublic ? "true" : "false",
                             );
 
-                            // إضافة الصور
                             for (const file of projForm.images || []) {
                                 formData.append("images", file);
                             }
 
-                            // طباعة محتوى formData للتأكد
-                            for (let pair of formData.entries()) {
-                                console.log(pair[0] + ": " + pair[1]);
-                            }
+                            await projectsAPI.create(formData);
 
-                            const res = await projectsAPI.create(formData);
-                            const created = res.data || res;
                             setShowProjectModal(false);
-                            if (created && created._id) {
-                                window.location.href = `/project/${created._id}`;
-                            } else {
-                                alert("تم إنشاء المشروع بنجاح");
-                            }
+
+                            const ownerId = params?.userId || user?._id;
+                            const projRes = await projectsAPI.list({
+                                userId: ownerId,
+                            });
+                            setUserProjects(projRes.data || []);
+
+                            alert("✅ تم إنشاء المشروع بنجاح");
                         } catch (err) {
-                            console.error("Full error object:", err);
-                            console.error(
-                                "Error response data:",
-                                err.response?.data,
-                            );
+                            console.error("❌ Error:", err);
                             const errorMsg =
                                 err.response?.data?.message ||
                                 err.response?.data?.error ||
@@ -294,6 +506,17 @@ export default function Profile({ navigate, params }) {
                             setProjLoading(false);
                         }
                     }}
+                />
+            )}
+
+            {editingProject && (
+                <EditProjectModal
+                    show={!!editingProject}
+                    onClose={() => setEditingProject(null)}
+                    project={editingProject}
+                    onSave={handleSaveProject}
+                    loading={editProjectLoading}
+                    error={editProjectError}
                 />
             )}
         </div>

@@ -1,4 +1,4 @@
-// app/profile/edit.js - نسخة محسنة مع رفع الصور
+// app/profile/edit.js - نسخة محسنة مع دمج البيانات
 import React, { useState, useEffect } from "react";
 import {
     View,
@@ -124,9 +124,15 @@ export default function EditProfile() {
             const response = await usersAPI.updateProfile(formData);
             const updatedUser = response.data || response;
 
+            // دمج البيانات الجديدة مع البيانات الحالية (authUser) للحفاظ على جميع الحقول
+            const mergedUser = {
+                ...authUser, // البيانات القديمة (الاسم، البريد، الصورة، المهارات، الشهادات...)
+                ...updatedUser, // البيانات الجديدة من الخادم
+            };
+
             // تحديث التخزين المحلي
-            await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
-            if (setAuthUser) setAuthUser(updatedUser);
+            await AsyncStorage.setItem("user", JSON.stringify(mergedUser));
+            if (setAuthUser) setAuthUser(mergedUser);
 
             Alert.alert("نجاح", "تم تحديث الملف الشخصي", [
                 { text: "حسناً", onPress: () => router.push("/profile") },

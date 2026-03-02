@@ -1,4 +1,4 @@
-// app/project/[id].js - الإصدار المعدل بالكامل
+// app/project/[id].js - النسخة الكاملة الآمنة 100%
 import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
@@ -11,11 +11,17 @@ import {
     FlatList,
     Alert,
     Linking,
+    RefreshControl,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { projectsAPI, likeAPI, commentAPI } from "../../src/services/api";
+import {
+    projectsAPI,
+    likeAPI,
+    commentAPI,
+    usersAPI,
+} from "../../src/services/api";
 
 export default function ProjectDetails() {
     const router = useRouter();
@@ -23,6 +29,7 @@ export default function ProjectDetails() {
     const projectId = params.id;
 
     const [project, setProject] = useState(null);
+    const [owner, setOwner] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isLiked, setIsLiked] = useState(false);
     const [likesCount, setLikesCount] = useState(0);
@@ -31,37 +38,7 @@ export default function ProjectDetails() {
     const [commenting, setCommenting] = useState(false);
     const [currentUser, setCurrentUser] = useState(null);
 
-    // دالة بديلة للتحقق من حالة الإعجاب باستخدام بيانات المشروع
-    const checkLikeStatusFromProject = (projectData, currentUser) => {
-        if (!projectData || !currentUser) {
-            return { isLiked: false, likesCount: 0 };
-        }
-
-        let isLiked = false;
-        let likesCount = 0;
-
-        // الطريقة 1: إذا كان هناك حقل likes كمصفوفة من معرفات المستخدمين
-        if (projectData.likes && Array.isArray(projectData.likes)) {
-            likesCount = projectData.likes.length;
-            isLiked = projectData.likes.includes(currentUser._id);
-        }
-        // الطريقة 2: إذا كان هناك حقل likedBy
-        else if (projectData.likedBy && Array.isArray(projectData.likedBy)) {
-            likesCount = projectData.likedBy.length;
-            isLiked = projectData.likedBy.includes(currentUser._id);
-        }
-        // الطريقة 3: إذا كان هناك حقل likesCount
-        else if (projectData.likesCount !== undefined) {
-            likesCount = projectData.likesCount;
-            // لا يمكننا معرفة إذا كان المستخدم معجبًا بدون بيانات إضافية
-        }
-
-        return { isLiked, likesCount };
-    };
-
     // دالة لتحميل بيانات المشروع
-    // في app/project/[id].js - استبدل دالة loadProjectData:
-
     const loadProjectData = useCallback(async () => {
         if (!projectId) {
             Alert.alert("خطأ", "معرف المشروع غير موجود");
@@ -79,11 +56,8 @@ export default function ProjectDetails() {
                 setCurrentUser(userData);
             }
 
-            console.log("📡 جاري تحميل المشروع:", projectId);
-
             // 1. جلب بيانات المشروع الرئيسية
-            const projectResponse = await projectsAPI.getById(projectId);
-            console.log("📊 بيانات المشروع من API:", projectResponse);
+            const projectResponse = await projectsAPI.get(projectId);
 
             // التعامل مع استجابة المشروع
             let projectData;
@@ -101,11 +75,29 @@ export default function ProjectDetails() {
 
             setProject(projectData);
 
-            // 2. جلب التعليقات
+            // 2. جلب بيانات صاحب المشروع
+            if (projectData.userId) {
+                if (
+                    typeof projectData.userId === "object" &&
+                    projectData.userId._id
+                ) {
+                    setOwner(projectData.userId);
+                } else if (typeof projectData.userId === "string") {
+                    try {
+                        const userRes = await usersAPI.getUserProfile(
+                            projectData.userId,
+                        );
+                        setOwner(userRes.data || userRes);
+                    } catch (error) {
+                        setOwner({ name: "مستخدم غير معروف" });
+                    }
+                }
+            }
+
+            // 3. جلب التعليقات
             try {
                 const commentsResponse =
                     await commentAPI.getComments(projectId);
-                console.log("💬 تعليقات المشروع:", commentsResponse);
 
                 let commentsList = [];
                 if (commentsResponse.comments) {
@@ -118,71 +110,47 @@ export default function ProjectDetails() {
 
                 setComments(commentsList);
             } catch (commentsError) {
-                console.log("⚠️ خطأ في جلب التعليقات:", commentsError.message);
                 setComments([]);
             }
 
-            // 3. جلب عدد الإعجابات (إذا كانت موجودة في Project.js)
-            // لاحظ أن Project.js الحالي لا يحتوي على likes
-            // إذا كنت تحتاج هذه الميزة، أضفها للنموذج أولاً
-            setLikesCount(0);
-            setIsLiked(false);
+            // 4. جلب عدد الإعجابات
+            setLikesCount(projectData.likesCount || 0);
 
-            // 4. محاولة التحقق من حالة الإعجاب (إذا كانت الميزة موجودة)
+            // 5. محاولة التحقق من حالة الإعجاب
             try {
                 const likeStatus = await likeAPI.checkLikeStatus(projectId);
-                console.log("❤️ حالة الإعجاب:", likeStatus);
 
-                // إذا كانت الميزة غير موجودة، تجاهل الخطأ
-                if (
-                    likeStatus.message &&
-                    likeStatus.message.includes("غير موجود")
-                ) {
-                    console.log("ℹ️ ميزة الإعجاب غير مفعلة في السيرفر");
-                } else if (likeStatus.isLiked !== undefined) {
+                if (likeStatus.isLiked !== undefined) {
                     setIsLiked(likeStatus.isLiked);
                     if (likeStatus.likesCount !== undefined) {
                         setLikesCount(likeStatus.likesCount);
                     }
                 }
             } catch (likeError) {
-                console.log(
-                    "⚠️ لا يمكن التحقق من حالة الإعجاب:",
-                    likeError.message,
-                );
+                // تجاهل الخطأ
             }
         } catch (error) {
-            console.error("❌ خطأ في تحميل بيانات المشروع:", error);
-
             let errorMessage = "تعذر تحميل بيانات المشروع";
-
             if (error.response?.status === 401) {
                 errorMessage = "انتهت جلستك. يرجى تسجيل الدخول مرة أخرى";
                 await AsyncStorage.clear();
                 router.push("/auth/login");
             } else if (error.response?.status === 404) {
                 errorMessage = "المشروع غير موجود";
-            } else if (error.response?.data?.message) {
-                errorMessage = error.response.data.message;
-            } else if (error.message) {
-                errorMessage = error.message;
             }
-
             Alert.alert("خطأ", errorMessage, [
                 { text: "حسناً", onPress: () => router.push("/tabs") },
             ]);
         } finally {
             setLoading(false);
         }
-    }, [projectId]);
+    }, [projectId, router]);
 
     useEffect(() => {
         if (projectId) {
             loadProjectData();
         }
     }, [projectId, loadProjectData]);
-
-    // استبدل دوال التعليقات والإعجابات في ملف [id].js بالنسخ المعدلة:
 
     const handleLike = async () => {
         try {
@@ -201,32 +169,17 @@ export default function ProjectDetails() {
                 return;
             }
 
-            console.log("❤️ جاري الإعجاب/إلغاء الإعجاب...");
-
             if (isLiked) {
                 await likeAPI.unlikeProject(projectId);
                 setIsLiked(false);
                 setLikesCount((prev) => Math.max(0, prev - 1));
-                console.log("✅ تم إلغاء الإعجاب");
             } else {
                 await likeAPI.likeProject(projectId);
                 setIsLiked(true);
                 setLikesCount((prev) => prev + 1);
-                console.log("✅ تم الإعجاب");
             }
         } catch (error) {
-            console.error("❌ خطأ في الإعجاب:", error);
-
-            let errorMessage = "فشل في عملية الإعجاب";
-            if (error.response?.status === 401) {
-                errorMessage = "انتهت جلستك. يرجى تسجيل الدخول مرة أخرى";
-                await AsyncStorage.clear();
-                router.push("/auth/login");
-            } else if (error.response?.data?.message) {
-                errorMessage = error.response.data.message;
-            }
-
-            Alert.alert("❌ خطأ", errorMessage);
+            Alert.alert("❌ خطأ", "فشل في عملية الإعجاب");
         }
     };
 
@@ -249,34 +202,12 @@ export default function ProjectDetails() {
 
         try {
             setCommenting(true);
-            console.log("💬 جاري إضافة تعليق...");
-
-            // إضافة التعليق عبر API
-            const response = await commentAPI.addComment(
-                projectId,
-                newComment.trim(),
-            );
-            console.log("📨 استجابة إضافة التعليق:", response);
-
-            // جلب التعليقات المحدثة بعد الإضافة
+            await commentAPI.addComment(projectId, newComment.trim());
             await loadProjectData();
-
             setNewComment("");
-
             Alert.alert("✅ تم", "تم إضافة التعليق بنجاح");
         } catch (error) {
-            console.error("❌ خطأ في إضافة التعليق:", error);
-
-            let errorMessage = "فشل في إضافة التعليق";
-            if (error.response?.status === 401) {
-                errorMessage = "انتهت جلستك. يرجى تسجيل الدخول مرة أخرى";
-                await AsyncStorage.clear();
-                router.push("/auth/login");
-            } else if (error.response?.data?.message) {
-                errorMessage = error.response.data.message;
-            }
-
-            Alert.alert("❌ خطأ", errorMessage);
+            Alert.alert("❌ خطأ", "فشل في إضافة التعليق");
         } finally {
             setCommenting(false);
         }
@@ -290,34 +221,21 @@ export default function ProjectDetails() {
                 style: "destructive",
                 onPress: async () => {
                     try {
-                        // حذف من API
-                        await commentAPI.deleteComment(projectId, commentId);
-
-                        // تحديث التعليقات بعد الحذف
+                        await commentAPI.deleteComment(commentId);
                         await loadProjectData();
-
                         Alert.alert("✅ تم", "تم حذف التعليق بنجاح");
                     } catch (error) {
-                        console.error("❌ خطأ في حذف التعليق:", error);
-
-                        let errorMessage = "فشل في حذف التعليق";
-                        if (error.response?.status === 401) {
-                            errorMessage = "غير مصرح لك بحذف هذا التعليق";
-                        } else if (error.response?.data?.message) {
-                            errorMessage = error.response.data.message;
-                        }
-
-                        Alert.alert("❌ خطأ", errorMessage);
+                        Alert.alert("❌ خطأ", "فشل في حذف التعليق");
                     }
                 },
             },
         ]);
     };
+
     // تنسيق التاريخ
     const formatDate = (dateString) => {
         try {
             if (!dateString) return "غير محدد";
-
             const date = new Date(dateString);
             if (isNaN(date.getTime())) return "غير محدد";
 
@@ -346,30 +264,9 @@ export default function ProjectDetails() {
     // فتح الروابط
     const openLink = (url) => {
         if (url) {
-            Linking.openURL(url).catch((err) => {
-                console.error("❌ فشل فتح الرابط:", err);
+            Linking.openURL(url).catch(() => {
                 Alert.alert("خطأ", "تعذر فتح الرابط");
             });
-        }
-    };
-
-    // دالة لجلب التعليقات مرة أخرى
-    const refreshComments = async () => {
-        try {
-            const commentsResponse = await commentAPI.getComments(projectId);
-
-            let commentsList = [];
-            if (commentsResponse.comments) {
-                commentsList = commentsResponse.comments;
-            } else if (commentsResponse.data) {
-                commentsList = commentsResponse.data;
-            } else if (Array.isArray(commentsResponse)) {
-                commentsList = commentsResponse;
-            }
-
-            setComments(commentsList);
-        } catch (error) {
-            console.error("❌ خطأ في تحديث التعليقات:", error);
         }
     };
 
@@ -414,6 +311,11 @@ export default function ProjectDetails() {
             </View>
         );
     }
+
+    const ownerName =
+        owner?.name ||
+        (typeof project.userId === "object" ? project.userId?.name : null) ||
+        "مجهول";
 
     return (
         <ScrollView
@@ -465,18 +367,14 @@ export default function ProjectDetails() {
                         />
                         <TouchableOpacity
                             onPress={() => {
-                                if (project.owner?._id) {
-                                    router.push(
-                                        `/profile?userId=${project.owner._id}`,
-                                    );
+                                const ownerId =
+                                    project.userId?._id || project.userId;
+                                if (ownerId && typeof ownerId === "string") {
+                                    router.push(`/profile?userId=${ownerId}`);
                                 }
                             }}
                         >
-                            <Text style={styles.infoText}>
-                                {project.owner?.name ||
-                                    project.user?.name ||
-                                    "مجهول"}
-                            </Text>
+                            <Text style={styles.infoText}>{ownerName}</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -646,7 +544,9 @@ export default function ProjectDetails() {
                     {comments.length > 0 ? (
                         <FlatList
                             data={comments}
-                            keyExtractor={(item) => item._id.toString()}
+                            keyExtractor={(item) =>
+                                item._id?.toString() || Math.random().toString()
+                            }
                             renderItem={({ item }) => (
                                 <View style={styles.commentItem}>
                                     <View style={styles.commentHeader}>
@@ -699,7 +599,7 @@ export default function ProjectDetails() {
                                             )}
                                     </View>
                                     <Text style={styles.commentText}>
-                                        {item.text}
+                                        {item.text || item.content || ""}
                                     </Text>
                                 </View>
                             )}
@@ -754,6 +654,7 @@ const styles = StyleSheet.create({
         color: "#FF3B30",
         marginTop: 15,
         marginBottom: 30,
+        textAlign: "center",
     },
     backHomeButton: {
         backgroundColor: "#007AFF",
@@ -1002,6 +903,7 @@ const styles = StyleSheet.create({
         color: "#8E8E93",
         marginTop: 15,
         marginBottom: 5,
+        textAlign: "center",
     },
     noCommentsSubtext: {
         fontSize: 14,
@@ -1009,6 +911,3 @@ const styles = StyleSheet.create({
         textAlign: "center",
     },
 });
-
-// أضف import RefreshControl في الأعلى
-import { RefreshControl } from "react-native";

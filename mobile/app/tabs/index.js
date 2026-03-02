@@ -1,4 +1,4 @@
-// mobile/app/tabs/index.js
+// app/tabs/index.js
 import React, { useState, useCallback } from "react";
 import {
     View,
@@ -9,59 +9,33 @@ import {
     ActivityIndicator,
     Alert,
     RefreshControl,
-    Image,
-    Dimensions,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useAuth } from "../../src/context/AuthContext";
 import { projectsAPI } from "../../src/services/api";
-
-const { width } = Dimensions.get("window");
+import { useAuth } from "../../src/context/AuthContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Button } from "react-native";
 
 export default function HomeScreen() {
     const router = useRouter();
-    const { user, logout } = useAuth(); // ✅ نأخذ المستخدم والخروج من السياق
+    const { user, logout } = useAuth();
 
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [stats, setStats] = useState({
-        total: 0,
-        avgRating: 0,
-        totalLikes: 0,
-    });
 
-    // جلب المشاريع
     const loadProjects = useCallback(async () => {
         try {
             setLoading(true);
             const result = await projectsAPI.getAll();
             if (result.success) {
-                const projs = result.data || [];
-                setProjects(projs);
-
-                // حساب إحصائيات سريعة
-                const total = projs.length;
-                const avg =
-                    projs.reduce((acc, p) => acc + (p.averageRating || 0), 0) /
-                    (total || 1);
-                const likes = projs.reduce(
-                    (acc, p) => acc + (p.likesCount || 0),
-                    0,
-                );
-                setStats({
-                    total,
-                    avgRating: avg.toFixed(1),
-                    totalLikes: likes,
-                });
+                setProjects(result.data || []);
             } else {
                 setProjects([]);
             }
         } catch (error) {
             console.error("❌ خطأ في جلب المشاريع:", error);
-            setProjects([]);
             if (error.response?.status === 401) {
                 Alert.alert("انتهت الجلسة", "يرجى تسجيل الدخول مرة أخرى", [
                     {
@@ -71,6 +45,7 @@ export default function HomeScreen() {
                 ]);
             } else {
                 Alert.alert("خطأ", "تعذر تحميل المشاريع");
+                setProjects([]);
             }
         } finally {
             setLoading(false);
@@ -89,23 +64,21 @@ export default function HomeScreen() {
         setRefreshing(false);
     }, [loadProjects]);
 
-    // دالة تسجيل الخروج (تستخدم logout من السياق)
     const handleLogout = () => {
-        Alert.alert("تسجيل الخروج", "هل أنت متأكد؟", [
+        Alert.alert("تسجيل الخروج", "هل تريد تسجيل الخروج؟", [
             { text: "إلغاء", style: "cancel" },
             {
                 text: "تسجيل الخروج",
                 style: "destructive",
                 onPress: async () => {
-                    await logout();
+                    await logout?.();
+                    router.replace("/auth/login");
                 },
             },
         ]);
     };
 
-    // عرض كل مشروع
     const renderProjectItem = ({ item }) => {
-        const coverImage = item.images?.[0];
         const categoryMap = {
             web: "ويب",
             mobile: "موبايل",
@@ -114,69 +87,55 @@ export default function HomeScreen() {
             other: "أخرى",
         };
 
+        const testAsyncStorage = async () => {
+            await AsyncStorage.setItem("test", "hello");
+            const value = await AsyncStorage.getItem("test");
+            console.log("🧪 AsyncStorage test:", value);
+        };
+
         return (
             <TouchableOpacity
                 style={styles.projectCard}
                 onPress={() => router.push(`/project/${item._id}`)}
-                activeOpacity={0.7}
             >
-                {coverImage ? (
-                    <Image
-                        source={{ uri: coverImage }}
-                        style={styles.projectImage}
-                    />
-                ) : (
-                    <View
-                        style={[styles.projectImage, styles.placeholderImage]}
-                    >
-                        <Ionicons name="image-outline" size={40} color="#ccc" />
-                    </View>
-                )}
-                <LinearGradient
-                    colors={["transparent", "rgba(0,0,0,0.7)"]}
-                    style={styles.imageOverlay}
-                />
-                <View style={styles.projectContent}>
-                    <View style={styles.projectHeader}>
-                        <Text style={styles.projectTitle} numberOfLines={1}>
-                            {item.title}
-                        </Text>
-                        <View style={styles.categoryBadge}>
-                            <Text style={styles.categoryText}>
-                                {categoryMap[item.category] || item.category}
-                            </Text>
-                        </View>
-                    </View>
-                    <Text style={styles.projectDescription} numberOfLines={2}>
-                        {item.shortDescription ||
-                            item.description ||
-                            "لا يوجد وصف"}
+                <Button title="Test AsyncStorage" onPress={testAsyncStorage} />
+                <View style={styles.projectHeader}>
+                    <Text style={styles.projectTitle} numberOfLines={1}>
+                        {item.title}
                     </Text>
-                    <View style={styles.projectStats}>
-                        <View style={styles.statItem}>
-                            <Ionicons name="star" size={14} color="#FFD700" />
-                            <Text style={styles.statText}>
-                                {item.averageRating?.toFixed(1) || "0.0"}
-                            </Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Ionicons name="heart" size={14} color="#FF3B30" />
-                            <Text style={styles.statText}>
-                                {item.likesCount || 0}
-                            </Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Ionicons
-                                name="time-outline"
-                                size={14}
-                                color="#fff"
-                            />
-                            <Text style={styles.statText}>
-                                {new Date(item.createdAt).toLocaleDateString(
-                                    "ar-EG",
-                                )}
-                            </Text>
-                        </View>
+                    <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryText}>
+                            {categoryMap[item.category] || item.category}
+                        </Text>
+                    </View>
+                </View>
+                <Text style={styles.projectDescription} numberOfLines={2}>
+                    {item.shortDescription || item.description || "لا يوجد وصف"}
+                </Text>
+                <View style={styles.projectStats}>
+                    <View style={styles.statItem}>
+                        <Ionicons name="star" size={14} color="#FFD700" />
+                        <Text style={styles.statText}>
+                            {item.averageRating?.toFixed(1) || "0.0"}
+                        </Text>
+                    </View>
+                    <View style={styles.statItem}>
+                        <Ionicons name="heart" size={14} color="#FF3B30" />
+                        <Text style={styles.statText}>
+                            {item.likesCount || 0}
+                        </Text>
+                    </View>
+                    <View style={styles.statItem}>
+                        <Ionicons
+                            name="time-outline"
+                            size={14}
+                            color="#8E8E93"
+                        />
+                        <Text style={styles.statText}>
+                            {new Date(item.createdAt).toLocaleDateString(
+                                "ar-EG",
+                            )}
+                        </Text>
                     </View>
                 </View>
             </TouchableOpacity>
@@ -194,53 +153,39 @@ export default function HomeScreen() {
 
     return (
         <View style={styles.container}>
-            {/* الهيدر بالتدرج اللوني */}
-            <LinearGradient
-                colors={["#007AFF", "#00C6FF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.header}
-            >
-                <View style={styles.headerContent}>
-                    <View>
-                        <Text style={styles.greeting}>أهلاً بك 👋</Text>
-                        <Text style={styles.userName}>
-                            {user?.name || "عزيزي المستخدم"}
-                        </Text>
-                        {user?.email && (
-                            <Text style={styles.userEmail}>{user.email}</Text>
-                        )}
-                    </View>
+            {/* الهيدر */}
+            <View style={styles.header}>
+                <View>
+                    <Text style={styles.greeting}>أهلاً بك 👋</Text>
+                    <Text style={styles.userName}>
+                        {user?.name || "عزيزي المستخدم"}
+                    </Text>
+                </View>
+                <View style={styles.headerActions}>
+                    {user?.role === "admin" && (
+                        <TouchableOpacity
+                            style={styles.adminButton}
+                            onPress={() => router.push("/admin")}
+                        >
+                            <Ionicons
+                                name="settings-outline"
+                                size={24}
+                                color="#fff"
+                            />
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity
-                        onPress={handleLogout}
                         style={styles.logoutButton}
+                        onPress={handleLogout}
                     >
                         <Ionicons
                             name="log-out-outline"
                             size={24}
-                            color="#fff"
+                            color="#FF3B30"
                         />
                     </TouchableOpacity>
                 </View>
-
-                {/* إحصائيات سريعة */}
-                <View style={styles.statsRow}>
-                    <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>{stats.total}</Text>
-                        <Text style={styles.statLabel}>مشروع</Text>
-                    </View>
-                    <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>{stats.avgRating}</Text>
-                        <Text style={styles.statLabel}>التقييم</Text>
-                    </View>
-                    <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>
-                            {stats.totalLikes}
-                        </Text>
-                        <Text style={styles.statLabel}>إعجاب</Text>
-                    </View>
-                </View>
-            </LinearGradient>
+            </View>
 
             {/* قائمة المشاريع */}
             <FlatList
@@ -253,7 +198,6 @@ export default function HomeScreen() {
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        colors={["#007AFF"]}
                     />
                 }
                 ListEmptyComponent={
@@ -285,7 +229,6 @@ export default function HomeScreen() {
             <TouchableOpacity
                 style={styles.fab}
                 onPress={() => router.push("/tabs/create")}
-                activeOpacity={0.8}
             >
                 <Ionicons name="add" size={30} color="#fff" />
             </TouchableOpacity>
@@ -294,38 +237,37 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#F8F9FA" },
+    container: { flex: 1, backgroundColor: "#F2F2F7" },
     header: {
+        backgroundColor: "#007AFF",
         paddingTop: 60,
         paddingBottom: 25,
         paddingHorizontal: 20,
         borderBottomLeftRadius: 30,
         borderBottomRightRadius: 30,
-    },
-    headerContent: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 20,
     },
     greeting: { fontSize: 16, color: "rgba(255,255,255,0.9)" },
     userName: { fontSize: 24, fontWeight: "bold", color: "#fff" },
-    userEmail: { fontSize: 14, color: "rgba(255,255,255,0.8)", marginTop: 4 },
+    headerActions: { flexDirection: "row", gap: 10 },
+    adminButton: {
+        backgroundColor: "rgba(255,255,255,0.2)",
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: "center",
+        alignItems: "center",
+    },
     logoutButton: {
         backgroundColor: "rgba(255,255,255,0.2)",
-        padding: 10,
-        borderRadius: 30,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: "center",
+        alignItems: "center",
     },
-    statsRow: {
-        flexDirection: "row",
-        justifyContent: "space-around",
-        backgroundColor: "rgba(255,255,255,0.2)",
-        borderRadius: 20,
-        paddingVertical: 15,
-    },
-    statBox: { alignItems: "center" },
-    statNumber: { fontSize: 22, fontWeight: "bold", color: "#fff" },
-    statLabel: { fontSize: 13, color: "rgba(255,255,255,0.9)" },
     loadingContainer: {
         flex: 1,
         justifyContent: "center",
@@ -335,66 +277,50 @@ const styles = StyleSheet.create({
     listContainer: { padding: 16, paddingBottom: 80 },
     projectCard: {
         backgroundColor: "#fff",
-        borderRadius: 20,
-        marginBottom: 16,
+        borderRadius: 16,
+        padding: 15,
+        marginBottom: 15,
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 5,
-        overflow: "hidden",
-    },
-    projectImage: { width: "100%", height: 150, resizeMode: "cover" },
-    placeholderImage: {
-        backgroundColor: "#E5E5EA",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    imageOverlay: {
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 100,
-    },
-    projectContent: {
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: 16,
+        shadowRadius: 8,
+        elevation: 3,
     },
     projectHeader: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 6,
+        marginBottom: 10,
     },
     projectTitle: {
         fontSize: 18,
-        fontWeight: "bold",
-        color: "#fff",
+        fontWeight: "600",
+        color: "#1D1D1F",
         flex: 1,
-        marginRight: 8,
+        marginRight: 10,
     },
     categoryBadge: {
-        backgroundColor: "rgba(255,255,255,0.25)",
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 20,
+        backgroundColor: "#E5F1FF",
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 15,
     },
-    categoryText: { fontSize: 12, color: "#fff", fontWeight: "600" },
+    categoryText: { fontSize: 12, color: "#007AFF", fontWeight: "500" },
     projectDescription: {
-        fontSize: 13,
-        color: "rgba(255,255,255,0.9)",
-        marginBottom: 8,
+        fontSize: 14,
+        color: "#666",
+        lineHeight: 20,
+        marginBottom: 12,
     },
     projectStats: {
         flexDirection: "row",
-        alignItems: "center",
+        borderTopWidth: 1,
+        borderTopColor: "#F2F2F7",
+        paddingTop: 10,
+        gap: 15,
     },
-    statItem: { flexDirection: "row", alignItems: "center", marginRight: 15 },
-    statText: { fontSize: 12, color: "#fff", marginLeft: 4 },
+    statItem: { flexDirection: "row", alignItems: "center" },
+    statText: { fontSize: 12, color: "#8E8E93", marginLeft: 4 },
     emptyContainer: {
         alignItems: "center",
         justifyContent: "center",
@@ -430,10 +356,10 @@ const styles = StyleSheet.create({
         borderRadius: 30,
         justifyContent: "center",
         alignItems: "center",
-        shadowColor: "#007AFF",
-        shadowOffset: { width: 0, height: 4 },
+        elevation: 5,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
+        shadowRadius: 3,
     },
 });

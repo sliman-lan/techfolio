@@ -1,11 +1,18 @@
-import React from "react";
+import React, { useState, useRef } from "react";
 
 const categoryOptions = [
     { value: "web", label: "ويب" },
     { value: "mobile", label: "موبايل" },
     { value: "ai", label: "ذكاء اصطناعي" },
     { value: "design", label: "تصميم" },
+    { value: "game", label: "ألعاب" },
     { value: "other", label: "أخرى" },
+];
+
+const projectLevels = [
+    { value: "beginner", label: "مبتدئ" },
+    { value: "intermediate", label: "متوسط" },
+    { value: "advanced", label: "متقدم" },
 ];
 
 export default function AddProjectModal({
@@ -17,6 +24,9 @@ export default function AddProjectModal({
     projError,
     onCreate,
 }) {
+    const fileInputRef = useRef(null);
+    const [imagePreviews, setImagePreviews] = useState([]);
+
     if (!show) return null;
 
     // Helper لتحديث الحقول البسيطة
@@ -34,17 +44,32 @@ export default function AddProjectModal({
         setProjForm((prev) => ({ ...prev, [field]: array }));
     };
 
-    // معالجة رفع الصور
+    // معالجة رفع الصور مع معاينة
     const handleImagesChange = (e) => {
-        setProjForm((prev) => ({
-            ...prev,
-            images: Array.from(e.target.files),
-        }));
+        const files = Array.from(e.target.files);
+        setProjForm((prev) => ({ ...prev, images: files }));
+
+        // إنشاء معاينات
+        const previews = files.map((file) => URL.createObjectURL(file));
+        setImagePreviews(previews);
     };
 
     // معالجة checkbox isPublic
     const handleIsPublicChange = (e) => {
         setProjForm((prev) => ({ ...prev, isPublic: e.target.checked }));
+    };
+
+    // التحقق من الحقول الإلزامية قبل الإرسال
+    const handleCreate = () => {
+        if (!projForm.title?.trim()) {
+            alert("العنوان مطلوب");
+            return;
+        }
+        if (!projForm.description?.trim()) {
+            alert("الوصف الطويل مطلوب");
+            return;
+        }
+        onCreate();
     };
 
     return (
@@ -58,6 +83,7 @@ export default function AddProjectModal({
                 <div className="modal-content rounded-4 shadow-lg border-0">
                     <div className="modal-header border-0 pb-0">
                         <h5 className="modal-title fw-bold">
+                            <i className="bi bi-plus-circle ms-2"></i>
                             إضافة مشروع جديد
                         </h5>
                         <button
@@ -112,22 +138,46 @@ export default function AddProjectModal({
                             </small>
                         </div>
 
-                        {/* الفئة */}
-                        <div className="mb-3">
-                            <label className="form-label fw-medium">
-                                فئة المشروع
-                            </label>
-                            <select
-                                className="form-select rounded-3"
-                                value={projForm.category || "web"}
-                                onChange={handleChange("category")}
-                            >
-                                {categoryOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                    </option>
-                                ))}
-                            </select>
+                        {/* الفئة ومستوى المشروع */}
+                        <div className="row">
+                            <div className="col-md-6 mb-3">
+                                <label className="form-label fw-medium">
+                                    فئة المشروع
+                                </label>
+                                <select
+                                    className="form-select rounded-3"
+                                    value={projForm.category || "web"}
+                                    onChange={handleChange("category")}
+                                >
+                                    {categoryOptions.map((opt) => (
+                                        <option
+                                            key={opt.value}
+                                            value={opt.value}
+                                        >
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="col-md-6 mb-3">
+                                <label className="form-label fw-medium">
+                                    مستوى المشروع
+                                </label>
+                                <select
+                                    className="form-select rounded-3"
+                                    value={projForm.level || "intermediate"}
+                                    onChange={handleChange("level")}
+                                >
+                                    {projectLevels.map((opt) => (
+                                        <option
+                                            key={opt.value}
+                                            value={opt.value}
+                                        >
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
                         {/* الوسوم (Tags) */}
@@ -182,13 +232,26 @@ export default function AddProjectModal({
                             </div>
                         </div>
 
+                        {/* رابط فيديو توضيحي */}
+                        <div className="mb-3">
+                            <label className="form-label fw-medium">
+                                رابط فيديو توضيحي (YouTube/Vimeo)
+                            </label>
+                            <input
+                                value={projForm.videoUrl || ""}
+                                onChange={handleChange("videoUrl")}
+                                className="form-control rounded-3"
+                                placeholder="https://youtube.com/watch?v=..."
+                            />
+                        </div>
+
                         {/* حالة النشر */}
                         <div className="mb-3 form-check">
                             <input
                                 type="checkbox"
                                 className="form-check-input"
                                 id="isPublicCheck"
-                                checked={projForm.isPublic !== false} // افتراضي true
+                                checked={projForm.isPublic !== false}
                                 onChange={handleIsPublicChange}
                             />
                             <label
@@ -199,28 +262,42 @@ export default function AddProjectModal({
                             </label>
                         </div>
 
-                        {/* صور المشروع */}
+                        {/* صور المشروع مع معاينة */}
                         <div className="mb-3">
                             <label className="form-label fw-medium">
                                 صور المشروع (اختياري)
                             </label>
                             <input
+                                ref={fileInputRef}
                                 type="file"
                                 multiple
                                 accept="image/*"
                                 className="form-control rounded-3"
                                 onChange={handleImagesChange}
                             />
-                            {projForm.images?.length > 0 && (
-                                <small className="text-muted d-block mt-1">
-                                    تم اختيار {projForm.images.length} صورة
-                                </small>
+                            {imagePreviews.length > 0 && (
+                                <div className="d-flex flex-wrap gap-2 mt-2">
+                                    {imagePreviews.map((src, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="border rounded-2 overflow-hidden"
+                                            style={{ width: 80, height: 80 }}
+                                        >
+                                            <img
+                                                src={src}
+                                                alt={`معاينة ${idx + 1}`}
+                                                className="w-100 h-100 object-fit-cover"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
 
                         {/* عرض الخطأ إن وجد */}
                         {projError && (
                             <div className="alert alert-danger rounded-3">
+                                <i className="bi bi-exclamation-triangle ms-2"></i>
                                 {projError}
                             </div>
                         )}
@@ -232,11 +309,12 @@ export default function AddProjectModal({
                             onClick={onClose}
                             disabled={projLoading}
                         >
+                            <i className="bi bi-x-lg ms-2"></i>
                             إلغاء
                         </button>
                         <button
                             className="btn btn-primary rounded-pill px-4"
-                            onClick={onCreate}
+                            onClick={handleCreate}
                             disabled={projLoading}
                         >
                             {projLoading ? (
@@ -245,7 +323,10 @@ export default function AddProjectModal({
                                     جاري الإنشاء...
                                 </>
                             ) : (
-                                "إنشاء المشروع"
+                                <>
+                                    <i className="bi bi-check-lg ms-2"></i>
+                                    إنشاء المشروع
+                                </>
                             )}
                         </button>
                     </div>

@@ -44,7 +44,7 @@ export default function ProjectCard({ project, navigate }) {
                         >
                             {ownerInitial}
                         </div>
-                        <span className="small text-muted">
+                        <span className="small text-muted me-2">
                             {project.userId?.name || "غير معروف"}
                         </span>
                     </div>
