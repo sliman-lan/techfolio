@@ -1,5 +1,5 @@
-import React, { createContext, useState, useEffect } from "react";
-import { authAPI, api, usersAPI } from "../services/api";
+import React, { createContext, useState, useEffect, useCallback } from "react";
+import { authAPI, usersAPI, api } from "../services/api";
 
 const AuthContext = createContext(null);
 
@@ -13,80 +13,184 @@ export function AuthProvider({ children }) {
             return null;
         }
     });
+    const [loading, setLoading] = useState(false);
+    const [initialized, setInitialized] = useState(false);
 
-    useEffect(() => {
-        if (token) {
-            localStorage.setItem("authToken", token);
-            api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    // دالة لتحديث التوكن
+    const updateToken = useCallback((newToken) => {
+        if (newToken) {
+            localStorage.setItem("authToken", newToken);
+            api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
         } else {
             localStorage.removeItem("authToken");
             delete api.defaults.headers.common["Authorization"];
         }
+        setToken(newToken);
+    }, []);
+
+    // جلب المستخدم الحالي
+    const fetchCurrentUser = useCallback(async () => {
+        if (!token) return null;
+
+        setLoading(true);
+        try {
+            const res = await authAPI.getMe();
+            const userData = res.data?.data || res.data;
+            if (userData) {
+                setUser(userData);
+                return userData;
+            }
+        } catch (error) {
+            console.error("❌ فشل جلب بيانات المستخدم:", error);
+            if (error.response?.status === 401) {
+                logout();
+            }
+        } finally {
+            setLoading(false);
+            setInitialized(true);
+        }
     }, [token]);
 
+    // تهيئة عند تحميل التطبيق
     useEffect(() => {
-        if (user) localStorage.setItem("user", JSON.stringify(user));
-        else localStorage.removeItem("user");
+        const init = async () => {
+            if (token) {
+                api.defaults.headers.common["Authorization"] =
+                    `Bearer ${token}`;
+                await fetchCurrentUser();
+            } else {
+                setInitialized(true);
+            }
+        };
+        init();
+    }, [token, fetchCurrentUser]);
+
+    // حفظ المستخدم في localStorage
+    useEffect(() => {
+        if (user) {
+            localStorage.setItem("user", JSON.stringify(user));
+        } else {
+            localStorage.removeItem("user");
+        }
     }, [user]);
 
     const login = async (credentials) => {
-        const res = await authAPI.login(credentials);
-        const payload = res.data && res.data.data ? res.data.data : null;
-        if (payload) {
-            if (payload.token) setToken(payload.token);
-            setUser({
-                _id: payload._id,
-                name: payload.name,
-                email: payload.email,
-                role: payload.role,
-            });
+        setLoading(true);
+        try {
+            const res = await authAPI.login(credentials);
+            const payload = res.data?.data || res.data;
+
+            if (payload?.token) {
+                updateToken(payload.token);
+                await fetchCurrentUser();
+                return { success: true };
+            }
+            return { success: false, error: "بيانات الدخول غير صحيحة" };
+        } catch (error) {
+            console.error("❌ خطأ في تسجيل الدخول:", error);
+            return {
+                success: false,
+                error:
+                    error.response?.data?.message || "حدث خطأ في تسجيل الدخول",
+            };
+        } finally {
+            setLoading(false);
         }
-        return res;
     };
 
-    const register = async (payload) => {
-        const res = await authAPI.register(payload);
-        const payloadData = res.data && res.data.data ? res.data.data : null;
-        if (payloadData) {
-            if (payloadData.token) setToken(payloadData.token);
-            setUser({
-                _id: payloadData._id,
-                name: payloadData.name,
-                email: payloadData.email,
-                role: payloadData.role,
-            });
+    const register = async (userData) => {
+        setLoading(true);
+        try {
+            const res = await authAPI.register(userData);
+            const payload = res.data?.data || res.data;
+
+            if (payload?.token) {
+                updateToken(payload.token);
+                await fetchCurrentUser();
+                return { success: true };
+            }
+            return { success: false, error: "فشل إنشاء الحساب" };
+        } catch (error) {
+            console.error("❌ خطأ في إنشاء الحساب:", error);
+            return {
+                success: false,
+                error:
+                    error.response?.data?.message || "حدث خطأ في إنشاء الحساب",
+            };
+        } finally {
+            setLoading(false);
         }
-        return res;
     };
 
-    const logout = () => {
-        setToken(null);
+    const logout = useCallback(() => {
+        updateToken(null);
         setUser(null);
-    };
+        localStorage.removeItem("user");
+    }, [updateToken]);
 
     const updateProfile = async (payload) => {
-        const res = await usersAPI.updateProfile(payload);
-        // usersAPI.updateProfile returns response.data typically, but some endpoints
-        // may return the full axios response. Normalize both shapes.
-        let data = null;
-        if (!res) data = null;
-        else if (res.data && res.data.data) data = res.data.data;
-        else if (res.data) data = res.data;
-        else data = res;
+        setLoading(true);
+        try {
+            const res = await usersAPI.updateProfile(payload);
+            const updatedData = res.data?.data || res.data;
 
-        if (data) {
-            // backend returns updated fields; merge into user state
-            setUser((u) => ({ ...(u || {}), ...data }));
+            if (updatedData) {
+                setUser((prev) => ({ ...prev, ...updatedData }));
+                return { success: true, data: updatedData };
+            }
+            return { success: false, error: "لم يتم تحديث البيانات" };
+        } catch (error) {
+            console.error("❌ خطأ في تحديث الملف:", error);
+            if (error.response?.status === 401) {
+                logout();
+            }
+            return {
+                success: false,
+                error:
+                    error.response?.data?.message || "حدث خطأ في تحديث الملف",
+            };
+        } finally {
+            setLoading(false);
         }
-        return res;
+    };
+
+    const changePassword = async (currentPassword, newPassword) => {
+        setLoading(true);
+        try {
+            await authAPI.changePassword({ currentPassword, newPassword });
+            return { success: true };
+        } catch (error) {
+            console.error("❌ خطأ في تغيير كلمة المرور:", error);
+            return {
+                success: false,
+                error:
+                    error.response?.data?.message ||
+                    "حدث خطأ في تغيير كلمة المرور",
+            };
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const value = {
+        token,
+        user,
+        loading,
+        initialized,
+        login,
+        register,
+        logout,
+        updateProfile,
+        changePassword,
+        fetchCurrentUser,
+        isAuthenticated: !!user,
+        isAdmin: user?.role === "admin",
+        isTeacher: user?.role === "teacher",
+        isStudent: user?.role === "student",
     };
 
     return (
-        <AuthContext.Provider
-            value={{ token, user, login, register, logout, updateProfile }}
-        >
-            {children}
-        </AuthContext.Provider>
+        <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
     );
 }
 

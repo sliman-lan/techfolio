@@ -109,35 +109,60 @@ router.post("/login", async (req, res) => {
 // @desc    الحصول على بيانات المستخدم الحالي
 // @access  Private
 router.get("/me", async (req, res) => {
+    console.log("\n=== طلب /me ===");
+    console.log("📨 Headers:", req.headers.authorization);
+
     try {
         const token = req.headers.authorization?.split(" ")[1];
+        console.log(
+            "🔑 التوكن المستلم:",
+            token ? token.substring(0, 30) + "..." : "لا يوجد",
+        );
 
         if (!token) {
+            console.log("❌ لا يوجد توكن");
             return res.status(401).json({
                 success: false,
                 message: "غير مصرح، لا يوجد رمز",
             });
         }
 
+        console.log(
+            "🔐 JWT_SECRET المستخدم:",
+            process.env.JWT_SECRET ? "موجود" : "غير موجود",
+        );
+
         const decoded = jwt.verify(
             token,
             process.env.JWT_SECRET || "techfolio_secret_key",
         );
-        const user = await User.findById(decoded.id).select("-password");
+        console.log("✅ تم فك التوكن بنجاح، userId:", decoded.id);
 
+        const user = await User.findById(decoded.id).select("-password");
         if (!user) {
+            console.log("❌ المستخدم غير موجود في قاعدة البيانات");
             return res.status(404).json({
                 success: false,
                 message: "المستخدم غير موجود",
             });
         }
 
+        console.log("✅ تم جلب المستخدم:", user.email);
         res.json({
             success: true,
             data: user,
         });
     } catch (error) {
-        console.error("Error in GET /api/auth/me:", error);
+        console.error("❌ خطأ في التحقق من التوكن:", error.message);
+        console.error("🔧 نوع الخطأ:", error.name);
+        if (error.name === "JsonWebTokenError") {
+            // محاولة فك الترميز دون تحقق لرؤية المحتوى
+            const decodedWithoutVerify = jwt.decode(token);
+            console.log(
+                "🔓 البيانات المفكوكة (بدون تحقق):",
+                decodedWithoutVerify,
+            );
+        }
         res.status(401).json({
             success: false,
             message: "غير مصرح، فشل التحقق من الرمز",
@@ -199,12 +224,10 @@ router.post("/change-password", protect, async (req, res) => {
 
         const isMatch = await user.comparePassword(currentPassword);
         if (!isMatch) {
-            return res
-                .status(401)
-                .json({
-                    success: false,
-                    message: "كلمة المرور الحالية غير صحيحة",
-                });
+            return res.status(401).json({
+                success: false,
+                message: "كلمة المرور الحالية غير صحيحة",
+            });
         }
 
         user.password = newPassword;

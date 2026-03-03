@@ -1,172 +1,283 @@
 const express = require("express");
 const router = express.Router();
+const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const Project = require("../models/Project");
 const User = require("../models/User");
 const { protect } = require("../middleware/auth");
-const { isAdmin } = require("../middleware/admin");
-// multer storage config (used for image uploads)
+const { isAdmin, isTeacher, isAdminOrTeacher } = require("../middleware/roles");
+
+// إعداد multer لرفع الصور
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, path.join(__dirname, "..", "uploads"));
-    },
-    filename: function (req, file, cb) {
+    destination: (req, file, cb) =>
+        cb(null, path.join(__dirname, "..", "uploads")),
+    filename: (req, file, cb) => {
         const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
         const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-\_]/g, "_");
         cb(null, `${unique}-${safeName}`);
     },
 });
-
 const upload = multer({ storage });
-// @route   GET /api/projects
-// @desc    الحصول على جميع المشاريع (يدعم فلترة بسيطة وبحث بالعناوين/اسم المؤلف)
-// @access  Public
+
+// ========== المسارات العامة ==========
 router.get("/", async (req, res) => {
     try {
         const { userId, category, q } = req.query;
-        const filter = { isPublic: true };
+        const filter = { status: "approved" };
         if (userId) filter.userId = userId;
         if (category) filter.category = category;
 
         if (q) {
-            // Search only by project title and author name (username)
             const regex = { $regex: q, $options: "i" };
-
-            // Find users whose name matches the query so we can include their projects
-            let authorIds = [];
-            try {
-                const matchedUsers = await User.find({ name: regex }).select(
-                    "_id",
-                );
-                authorIds = matchedUsers.map((u) => u._id);
-            } catch (e) {
-                authorIds = [];
-            }
-
+            const matchedUsers = await User.find({ name: regex }).select("_id");
+            const authorIds = matchedUsers.map((u) => u._id);
             const or = [{ title: regex }];
-            if (authorIds.length > 0) or.push({ userId: { $in: authorIds } });
-
+            if (authorIds.length) or.push({ userId: { $in: authorIds } });
             filter.$or = or;
         }
 
         const projects = await Project.find(filter)
             .populate("userId", "name avatar")
             .sort({ createdAt: -1 });
-
-        // Normalize response: provide `owner` and `user` aliases for frontend
-        const normalized = projects.map((p) => {
-            const obj = p.toObject ? p.toObject() : { ...p };
-            obj.owner = obj.userId || null;
-            obj.user = obj.userId || null;
-            return obj;
-        });
-
-        res.json(normalized);
+        res.json(projects);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
-// @route   GET /api/projects/:id
-// @desc    الحصول على مشروع معين
+// ========== مسارات محمية (يجب أن تأتي قبل المسارات الديناميكية) ==========
+
+// ✅ مسار مشاريع المستخدم الحالي (ثابت)
+router.get("/my", protect, async (req, res) => {
+    try {
+        const projects = await Project.find({ userId: req.user._id })
+            .populate("userId", "name avatar")
+            .sort({ createdAt: -1 });
+        res.json(projects);
+    } catch (error) {
+        console.error("خطأ في /projects/my:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// ✅ مسار المشاريع المعلقة (للمشرف)
+router.get("/admin/pending", protect, isAdmin, async (req, res) => {
+    try {
+        const projects = await Project.find({ status: "pending" })
+            .populate("userId", "name email")
+            .sort({ createdAt: 1 });
+        res.json({ success: true, data: projects });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// ✅ جميع المشاريع (للمشرف)
+router.get("/admin/all", protect, isAdmin, async (req, res) => {
+    try {
+        const projects = await Project.find({})
+            .populate("userId", "name email avatar role")
+            .sort({ createdAt: -1 });
+        res.json({ success: true, data: projects });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @route   GET /api/projects/featured
+// @desc    الحصول على المشاريع المميزة
 // @access  Public
+router.get("/featured", async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 6;
+
+        const featuredProjects = await Project.find({
+            status: "approved",
+            isFeatured: true,
+        })
+            .populate("userId", "name avatar")
+            .sort({ createdAt: -1 })
+            .limit(limit);
+
+        res.json(featuredProjects);
+    } catch (error) {
+        console.error("❌ Error fetching featured projects:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// ========== المسارات الديناميكية (تأتي بعد الثابتة) ==========
 router.get("/:id", async (req, res) => {
     try {
         const project = await Project.findById(req.params.id)
             .populate("userId", "name avatar email")
             .populate("ratings.userId", "name");
-
-        if (!project || !project.isPublic) {
+        if (!project || project.status !== "approved") {
             return res.status(404).json({ message: "المشروع غير موجود" });
         }
-
-        // Normalize response to include `owner` and `user` aliases
-        const projectObj = project.toObject ? project.toObject() : project;
-        projectObj.owner = projectObj.userId || null;
-        projectObj.user = projectObj.userId || null;
-        res.json(projectObj);
+        res.json(project);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
-// @route   POST /api/projects
-// @desc    إنشاء مشروع جديد (يدعم رفع صور)
-// @access  Private
-router.post("/", protect, upload.array("images", 6), async (req, res) => {
-    try {
-        // منع المشرفين من إنشاء مشاريع (دور المشرف مخصص للتقييم والحذف فقط)
-        if (req.user && req.user.role === "admin") {
+// تعديل مسار إنشاء المشروع لمعالجة أخطاء multer بشكل صحيح
+router.post(
+    "/",
+    protect,
+    (req, res, next) => {
+        // استدعاء multer middleware يدويًا مع معالج أخطاء
+        upload.array("images", 6)(req, res, (err) => {
+            if (err) {
+                console.error("Multer error:", err);
+                return res.status(400).json({ message: err.message });
+            }
+            next();
+        });
+    },
+    async (req, res) => {
+        // التحقق من دور المستخدم
+        if (req.user.role !== "student") {
             return res
                 .status(403)
-                .json({ message: "المشرف غير مسموح له بإنشاء مشاريع" });
-        }
-        const body = req.body || {};
-
-        const project = new Project({
-            title: body.title,
-            description: body.description,
-            shortDescription: body.shortDescription,
-            category: body.category || "web",
-            demoUrl: body.demoUrl,
-            githubUrl: body.githubUrl,
-            userId: req.user._id,
-        });
-
-        // attach uploaded images as absolute URLs
-        if (req.files && req.files.length > 0) {
-            const baseUrl = `${req.protocol}://${req.get("host")}`;
-            project.images = req.files.map(
-                (f) => `${baseUrl}/uploads/${f.filename}`,
-            );
+                .json({ message: "فقط الطلاب يمكنهم إنشاء مشاريع" });
         }
 
-        const savedProject = await project.save();
-        res.status(201).json(savedProject);
-    } catch (error) {
-        res.status(400).json({ message: error.message });
-    }
-});
+        try {
+            // إنشاء كائن المشروع
+            const project = new Project({
+                title: req.body.title,
+                description: req.body.description,
+                shortDescription: req.body.shortDescription,
+                category: req.body.category || "web",
+                demoUrl: req.body.demoUrl,
+                githubUrl: req.body.githubUrl,
+                userId: req.user._id,
+                status: "pending",
+            });
+
+            // معالجة الصور المرفوعة
+            if (req.files && req.files.length > 0) {
+                const baseUrl = `${req.protocol}://${req.get("host")}`;
+                project.images = req.files.map(
+                    (f) => `${baseUrl}/uploads/${f.filename}`,
+                );
+            }
+
+            // حفظ المشروع
+            const saved = await project.save();
+            res.status(201).json(saved);
+        } catch (error) {
+            console.error("Error saving project:", error);
+            res.status(400).json({ message: error.message });
+        }
+    },
+);
 
 // @route   PUT /api/projects/:id
 // @desc    تحديث مشروع
-// @access  Private
+// @access  Private (owner only)
 router.put("/:id", protect, upload.array("images", 6), async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
-
         if (!project) {
             return res.status(404).json({ message: "المشروع غير موجود" });
         }
 
-        // التحقق من ملكية المشروع
+        // التحقق من أن المستخدم هو المالك
         if (project.userId.toString() !== req.user._id.toString()) {
             return res
                 .status(403)
-                .json({ message: "ليس لديك صلاحية لتعديل هذا المشروع" });
+                .json({ message: "غير مصرح لك بتعديل هذا المشروع" });
         }
 
-        Object.assign(project, req.body);
+        // تخزين الصور القديمة لحذفها لاحقاً
+        const oldImages = [...project.images];
 
+        // تحديث الحقول النصية
+        const allowedUpdates = [
+            "title",
+            "description",
+            "shortDescription",
+            "category",
+            "level",
+            "demoUrl",
+            "githubUrl",
+            "videoUrl",
+            "tags",
+            "technologies",
+            "isPublic",
+            "status",
+        ];
+
+        allowedUpdates.forEach((field) => {
+            if (req.body[field] !== undefined) {
+                // معالجة خاصة للمصفوفات
+                if (field === "tags" || field === "technologies") {
+                    try {
+                        project[field] = JSON.parse(req.body[field]);
+                    } catch {
+                        project[field] = req.body[field];
+                    }
+                } else {
+                    project[field] = req.body[field];
+                }
+            }
+        });
+
+        // معالجة الصور الموجودة (التي يريد المستخدم الاحتفاظ بها)
+        const imagesToKeep = req.body.existingImages
+            ? JSON.parse(req.body.existingImages)
+            : [];
+
+        // الصور التي سيتم الاحتفاظ بها
+        project.images = imagesToKeep;
+
+        // إضافة الصور الجديدة
         if (req.files && req.files.length > 0) {
             const baseUrl = `${req.protocol}://${req.get("host")}`;
-            // append new images
-            project.images = project.images.concat(
-                req.files.map((f) => `${baseUrl}/uploads/${f.filename}`),
+            const newImages = req.files.map(
+                (f) => `${baseUrl}/uploads/${f.filename}`,
             );
+            project.images = [...project.images, ...newImages];
         }
 
+        // حفظ المشروع أولاً للتأكد من نجاح العملية
         const updatedProject = await project.save();
+
+        // بعد حفظ المشروع بنجاح، حذف الصور القديمة التي لم يعد لها وجود
+        if (oldImages.length > 0) {
+            const imagesToDelete = oldImages.filter(
+                (oldImg) =>
+                    !project.images.includes(oldImg) &&
+                    !oldImg.includes("default-project"), // لا تحذف الصور الافتراضية
+            );
+
+            imagesToDelete.forEach((imgUrl) => {
+                // استخراج اسم الملف من الرابط
+                const filename = imgUrl.split("/").pop();
+                const filePath = path.join(
+                    __dirname,
+                    "..",
+                    "uploads",
+                    filename,
+                );
+
+                // حذف الملف من المجلد
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                    console.log(`🗑️ تم حذف الصورة: ${filename}`);
+                }
+            });
+        }
+
         res.json(updatedProject);
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        console.error("❌ Error updating project:", error);
+        res.status(500).json({ message: error.message });
     }
 });
-
-// @route   DELETE /api/projects/:id
-// @desc    حذف مشروع
-// @access  Private
 router.delete("/:id", protect, async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
@@ -175,87 +286,152 @@ router.delete("/:id", protect, async (req, res) => {
             return res.status(404).json({ message: "المشروع غير موجود" });
         }
 
-        // المالك أو المشرف يمكنه الحذف
-        if (
-            project.userId.toString() !== req.user._id.toString() &&
-            req.user.role !== "admin"
-        ) {
+        // التحقق من الصلاحية (المالك أو المشرف)
+        const isOwner = project.userId.toString() === req.user._id.toString();
+        const isAdmin = req.user.role === "admin";
+
+        if (!isOwner && !isAdmin) {
             return res
                 .status(403)
-                .json({ message: "ليس لديك صلاحية لحذف هذا المشروع" });
+                .json({ message: "غير مصرح لك بحذف هذا المشروع" });
         }
 
-        await project.remove();
-        res.json({ message: "تم حذف المشروع بنجاح" });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-});
+        // ✅ استخدم deleteOne() بدلاً من remove()
+        await project.deleteOne();
+        // أو يمكنك استخدام:
+        // await Project.findByIdAndDelete(req.params.id);
 
-// ----------------------
-// Admin-only routes
-// ----------------------
-// @route   GET /api/admin/projects
-// @desc    الحصول على جميع المشاريع (بما في ذلك الخاصة) - لعرضها في لوحة المشرف
-// @access  Private (admin)
-router.get("/admin/all", protect, isAdmin, async (req, res) => {
-    try {
-        const projects = await Project.find({})
-            .populate("userId", "name email avatar role")
-            .sort({ createdAt: -1 });
-
-        const normalized = projects.map((p) => {
-            const obj = p.toObject ? p.toObject() : { ...p };
-            obj.owner = obj.userId || null;
-            obj.user = obj.userId || null;
-            return obj;
+        res.json({
+            success: true,
+            message: "تم حذف المشروع بنجاح",
         });
-
-        res.json({ success: true, data: normalized });
     } catch (error) {
+        console.error("❌ Error deleting project:", error);
         res.status(500).json({ message: error.message });
     }
 });
-
-// @route   POST /api/projects/:id/rate
-// @desc    إضافة تقييم لمشروع
-// @access  Private
-router.post("/:id/rate", protect, async (req, res) => {
+router.post("/:id/rate", protect, isTeacher, async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
-
-        if (!project || !project.isPublic) {
+        if (!project || project.status !== "approved") {
             return res.status(404).json({ message: "المشروع غير موجود" });
         }
-
-        // التحقق إذا كان المستخدم قد قام بالتقييم مسبقاً
-        const existingRating = project.ratings.find(
-            (rating) => rating.userId.toString() === req.user._id.toString(),
+        const existing = project.ratings.find(
+            (r) => r.userId.toString() === req.user._id.toString(),
         );
-
-        if (existingRating) {
+        if (existing) {
             return res
                 .status(400)
                 .json({ message: "لقد قمت بتقييم هذا المشروع مسبقاً" });
         }
-
-        // إضافة التقييم الجديد
         project.ratings.push({
             userId: req.user._id,
             value: req.body.value,
             comment: req.body.comment,
         });
-
-        // حساب التقييم المتوسط
         project.calculateAverageRating();
+        await project.save();
+        res.json({ message: "تم إضافة التقييم", project });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// @route   PUT /api/projects/:id/review
+// @desc    مراجعة مشروع (قبول أو رفض)
+// @access  Private (Admin only)
+router.put("/:id/review", protect, isAdmin, async (req, res) => {
+    try {
+        const { action, rejectionReason } = req.body;
+        const project = await Project.findById(req.params.id);
+
+        if (!project) {
+            return res.status(404).json({ message: "المشروع غير موجود" });
+        }
+
+        if (action === "approve") {
+            project.status = "approved";
+            project.rejectionReason = undefined;
+        } else if (action === "reject") {
+            project.status = "rejected";
+            project.rejectionReason = rejectionReason || "لم يتم تقديم سبب";
+        } else {
+            return res.status(400).json({ message: "إجراء غير صالح" });
+        }
+
         await project.save();
 
         res.json({
-            message: "تم إضافة التقييم بنجاح",
-            project,
+            success: true,
+            message: `تم ${action === "approve" ? "قبول" : "رفض"} المشروع بنجاح`,
+            data: project,
         });
     } catch (error) {
+        console.error("❌ Error in project review:", error);
         res.status(500).json({ message: error.message });
+    }
+});
+
+// @route   POST /api/projects/:id/views
+// @desc    زيادة عدد مشاهدات المشروع
+// @access  Public
+router.post("/:id/views", async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id);
+
+        if (!project) {
+            return res.status(404).json({
+                success: false,
+                message: "المشروع غير موجود",
+            });
+        }
+
+        // زيادة عدد المشاهدات
+        project.views = (project.views || 0) + 1;
+        project.lastViewed = Date.now();
+
+        await project.save();
+
+        res.json({
+            success: true,
+            message: "تم زيادة عدد المشاهدات",
+            views: project.views,
+        });
+    } catch (error) {
+        console.error("❌ Error incrementing views:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+});
+
+// @route   GET /api/projects/admin/:id
+// @desc    الحصول على مشروع معين (للمشرف - يشمل جميع الحالات)
+// @access  Private (Admin only)
+router.get("/admin/:id", protect, isAdmin, async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id)
+            .populate("userId", "name avatar email")
+            .populate("ratings.userId", "name");
+
+        if (!project) {
+            return res.status(404).json({
+                success: false,
+                message: "المشروع غير موجود",
+            });
+        }
+
+        res.json({
+            success: true,
+            data: project,
+        });
+    } catch (error) {
+        console.error("❌ Error fetching project for admin:", error);
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
     }
 });
 

@@ -1,5 +1,5 @@
-// app/profile/index.js - مع نظام المتابعة والإحصائيات
-import React, { useState, useCallback, useEffect } from "react";
+// app/profile/index.js
+import React, { useState, useCallback } from "react";
 import {
     View,
     Text,
@@ -8,132 +8,157 @@ import {
     ScrollView,
     ActivityIndicator,
     Alert,
+    RefreshControl,
+    Image,
 } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { followAPI, usersAPI, authAPI } from "../../src/services/api";
+import { followAPI, usersAPI, projectsAPI } from "../../src/services/api";
 import { useAuth } from "../../src/context/AuthContext";
 
 export default function ProfileScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
 
-    const [user, setUser] = useState(null);
-    const [currentUser, setCurrentUser] = useState(null);
+    const {
+        user: authUser,
+        setUser: setAuthUser,
+        logout: contextLogout,
+        isCheckingAuth,
+    } = useAuth();
+
+    const [displayedUser, setDisplayedUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [isFollowing, setIsFollowing] = useState(false);
     const [stats, setStats] = useState({
         followersCount: 0,
         followingCount: 0,
         projectsCount: 0,
         likesCount: 0,
-        ratedCount: 0,
-        unratedCount: 0,
     });
 
-    // تحديد إذا كان هذا البروفايل للمستخدم الحالي
-    const [isOwnProfile, setIsOwnProfile] = useState(true);
+    const isOwnProfile = !params.userId || params.userId === authUser?._id;
 
-    const loadProfileData = useCallback(async () => {
+    const fetchProfileFromServer = useCallback(async () => {
         try {
-            setLoading(true);
+            let userData;
 
-            // جلب المستخدم الحالي
-            const userString = await AsyncStorage.getItem("user");
-            if (userString) {
-                const currentUserData = JSON.parse(userString);
-                setCurrentUser(currentUserData);
+            if (isOwnProfile) {
+                const res = await usersAPI.getProfile();
+                userData = res;
 
-                // إذا كان هناك معرف مستخدم في الرابط
-                if (params.userId && params.userId !== currentUserData._id) {
-                    setIsOwnProfile(false);
-                    // جلب بيانات المستخدم المعروض + حالة المتابعة وإحصائياته
-                    const [userResponse, followStatusRes, statsRes] =
-                        await Promise.all([
-                            usersAPI.getUserProfile(params.userId),
-                            followAPI.checkFollowStatus(params.userId),
-                            followAPI.getUserStats(params.userId),
-                        ]);
-
-                    // usersAPI.getUserProfile returns the user object directly
-                    setUser(userResponse);
-
-                    // followAPI.checkFollowStatus returns { success, data: { isFollowing } }
-                    setIsFollowing(followStatusRes?.data?.isFollowing || false);
-
-                    // followAPI.getUserStats returns { data: { followersCount, followingCount, projectsCount, likesCount } }
-                    setStats(
-                        statsRes?.data || {
-                            followersCount: 0,
-                            followingCount: 0,
-                            projectsCount: 0,
-                            likesCount: 0,
-                        },
+                if (
+                    userData &&
+                    JSON.stringify(userData) !== JSON.stringify(authUser)
+                ) {
+                    setAuthUser(userData);
+                    await AsyncStorage.setItem(
+                        "user",
+                        JSON.stringify(userData),
                     );
-                } else {
-                    // عرض بيانات المستخدم الحالي — حاول تحديثه من السيرفر حتى يظهر الـ bio
-                    setIsOwnProfile(true);
-                    try {
-                        const profileRes = await usersAPI.getProfile();
-                        const serverUser = profileRes?.data || profileRes;
-                        if (serverUser) {
-                            setUser(serverUser);
-                            try {
-                                await AsyncStorage.setItem(
-                                    "user",
-                                    JSON.stringify(serverUser),
-                                );
-                            } catch (e) {}
-                            try {
-                                if (typeof setAuthUser === "function") {
-                                    setAuthUser(serverUser);
-                                }
-                            } catch (e) {
-                                console.warn("setAuthUser failed:", e);
-                            }
-                        } else {
-                            setUser(currentUserData);
-                        }
-                    } catch (err) {
-                        console.warn(
-                            "getProfile failed, fallback to local user:",
-                            err?.message || err,
-                        );
-                        setUser(currentUserData);
-                    }
+                }
+            } else {
+                const res = await usersAPI.getUserProfile(params.userId);
+                userData = res;
+            }
 
-                    // جلب إحصائيات المستخدم الحالي
-                    // If admin, compute global project stats
-                    if (currentUserData.role === "admin") {
-                        try {
-                            const adminRes = await (await import("../../src/services/api")).projectsAPI.adminList();
-                            const projects = (adminRes.data && adminRes.data.data) || adminRes.data || [];
-                            const total = projects.length;
-                            const rated = projects.filter((p) => Array.isArray(p.ratings) && p.ratings.length > 0).length;
-                            const unrated = total - rated;
-                            setStats((prev) => ({ ...prev, projectsCount: total, ratedCount: rated, unratedCount: unrated }));
-                        } catch (e) {
-                            console.warn("failed loading admin project stats", e);
-                        }
-                    } else {
-                        const statsResponse = await followAPI.getUserStats(currentUserData._id);
-                        setStats(statsResponse.data);
-                    }
+            setDisplayedUser(userData);
+        } catch (error) {
+            console.error("❌ فشل جلب بيانات الملف الشخصي:", error);
+            if (error.response?.status === 401) {
+                Alert.alert("انتهت الجلسة", "يرجى تسجيل الدخول مرة أخرى", [
+                    {
+                        text: "تسجيل الدخول",
+                        onPress: () => router.replace("/auth/login"),
+                    },
+                ]);
+                contextLogout();
+            }
+        }
+    }, [
+        isOwnProfile,
+        params.userId,
+        authUser,
+        setAuthUser,
+        contextLogout,
+        router,
+    ]);
+
+    const fetchStats = useCallback(async () => {
+        try {
+            const targetId = isOwnProfile ? authUser?._id : params.userId;
+            if (!targetId) return;
+
+            // جلب إحصائيات المتابعة
+            try {
+                const followersRes = await followAPI.getFollowers(targetId);
+                const followingRes = await followAPI.getFollowing(targetId);
+
+                setStats((prev) => ({
+                    ...prev,
+                    followersCount: followersRes.data?.length || 0,
+                    followingCount: followingRes.data?.length || 0,
+                }));
+            } catch (error) {
+                console.log("⚠️ فشل جلب إحصائيات المتابعة");
+            }
+
+            // جلب عدد مشاريع المستخدم
+            try {
+                const projectsRes = await projectsAPI.list({
+                    userId: targetId,
+                    limit: 1,
+                });
+                setStats((prev) => ({
+                    ...prev,
+                    projectsCount: projectsRes.total || 0,
+                }));
+            } catch (error) {
+                console.log("⚠️ فشل جلب عدد المشاريع");
+            }
+
+            // التحقق من حالة المتابعة إذا كان ملف شخصي لشخص آخر
+            if (!isOwnProfile) {
+                try {
+                    const followRes =
+                        await followAPI.checkFollowStatus(targetId);
+                    setIsFollowing(followRes.data?.isFollowing || false);
+                } catch (followError) {
+                    console.log("⚠️ فشل التحقق من حالة المتابعة");
                 }
             }
         } catch (error) {
-            console.error("❌ خطأ في تحميل بيانات البروفايل:", error);
+            console.warn("⚠️ فشل جلب الإحصائيات:", error);
+        }
+    }, [isOwnProfile, params.userId, authUser?._id]);
+
+    const loadAllData = useCallback(async () => {
+        setLoading(true);
+        try {
+            await fetchProfileFromServer();
+            await fetchStats();
+        } catch (error) {
+            console.error("خطأ في تحميل البيانات:", error);
         } finally {
             setLoading(false);
         }
-    }, [params.userId]);
+    }, [fetchProfileFromServer, fetchStats]);
 
-    useEffect(() => {
-        loadProfileData();
-    }, [loadProfileData]);
+    useFocusEffect(
+        useCallback(() => {
+            if (!isCheckingAuth) {
+                loadAllData();
+            }
+        }, [isCheckingAuth, params.userId]),
+    );
 
-    const { logout: contextLogout, setUser: setAuthUser } = useAuth();
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await loadAllData();
+        setRefreshing(false);
+    };
 
     const handleFollow = async () => {
         try {
@@ -144,7 +169,6 @@ export default function ProfileScreen() {
                     ...prev,
                     followersCount: prev.followersCount - 1,
                 }));
-                Alert.alert("✅ تم", "تم إلغاء المتابعة بنجاح");
             } else {
                 await followAPI.followUser(params.userId);
                 setIsFollowing(true);
@@ -152,59 +176,42 @@ export default function ProfileScreen() {
                     ...prev,
                     followersCount: prev.followersCount + 1,
                 }));
-                Alert.alert("✅ تم", "تمت المتابعة بنجاح");
             }
-        } catch (error) {
-            console.error("❌ خطأ في المتابعة:", error);
-            Alert.alert("❌ خطأ", "فشل في عملية المتابعة");
+        } catch {
+            Alert.alert("خطأ", "فشل في عملية المتابعة");
         }
     };
 
     const handleLogout = async () => {
-        // Use window.confirm on web for visible sync behavior
-        if (typeof window !== "undefined") {
-            const ok = window.confirm("هل تريد تسجيل الخروج؟");
-            if (!ok) return;
-            console.log("Logout confirmed (web)");
-            try {
-                if (contextLogout) {
-                    await contextLogout();
-                    console.log("Context logout completed");
-                } else {
-                    await authAPI.logout();
-                    console.log("authAPI.logout completed");
-                    router.replace("/auth/login");
-                }
-            } catch (e) {
-                console.warn("Logout error:", e);
-            }
-            return;
+        try {
+            await contextLogout();
+            router.replace("/auth/login");
+        } catch (error) {
+            console.error("❌ فشل تسجيل الخروج:", error);
         }
-
-        // native
-        Alert.alert("تسجيل الخروج", "هل تريد تسجيل الخروج؟", [
-            { text: "إلغاء", style: "cancel" },
-            {
-                text: "تسجيل الخروج",
-                style: "destructive",
-                onPress: async () => {
-                    console.log("Logout pressed - starting logout flow");
-                    try {
-                        if (contextLogout) {
-                            await contextLogout();
-                            console.log("Context logout completed");
-                        } else {
-                            await authAPI.logout();
-                            console.log("authAPI.logout completed");
-                            router.replace("/auth/login");
-                        }
-                    } catch (e) {
-                        console.warn("Logout error:", e);
-                    }
-                },
-            },
-        ]);
     };
+
+    if (isCheckingAuth) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+            </View>
+        );
+    }
+
+    if (!authUser && isOwnProfile) {
+        return (
+            <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>أنت غير مسجل الدخول</Text>
+                <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={() => router.replace("/auth/login")}
+                >
+                    <Text style={styles.retryText}>تسجيل الدخول</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
 
     if (loading) {
         return (
@@ -214,78 +221,109 @@ export default function ProfileScreen() {
         );
     }
 
+    if (!displayedUser) {
+        return (
+            <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>فشل تحميل الملف الشخصي</Text>
+                <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={loadAllData}
+                >
+                    <Text style={styles.retryText}>إعادة المحاولة</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
     return (
         <ScrollView
             style={styles.container}
-            showsVerticalScrollIndicator={false}
+            refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
         >
             {/* الهيدر */}
             <View style={styles.header}>
                 <TouchableOpacity
+                    onPress={() => router.replace("/tabs")}
                     style={styles.backButton}
-                    onPress={() => router.push("/tabs")}
                 >
                     <Ionicons name="arrow-back" size={24} color="#007AFF" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>الملف الشخصي</Text>
                 {isOwnProfile ? (
-                    <TouchableOpacity
-                        style={styles.logoutButton}
-                        onPress={handleLogout}
-                    >
-                        <Ionicons
-                            name="log-out-outline"
-                            size={22}
-                            color="#FF3B30"
-                        />
-                    </TouchableOpacity>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity
+                            onPress={() => router.push("/profile/edit")}
+                            style={styles.editButton}
+                        >
+                            <Ionicons
+                                name="create-outline"
+                                size={22}
+                                color="#007AFF"
+                            />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={handleLogout}
+                            style={styles.logoutButton}
+                        >
+                            <Ionicons
+                                name="log-out-outline"
+                                size={22}
+                                color="#FF3B30"
+                            />
+                        </TouchableOpacity>
+                    </View>
                 ) : (
                     <View style={{ width: 40 }} />
                 )}
             </View>
 
-            {/* معلومات المستخدم */}
-            <View style={styles.profileSection}>
+            {/* المحتوى */}
+            <View style={styles.profileCard}>
                 <View style={styles.avatarContainer}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>
-                            {user?.name?.charAt(0) || "م"}
-                        </Text>
-                    </View>
+                    {displayedUser.avatar ? (
+                        <Image
+                            source={{ uri: displayedUser.avatar }}
+                            style={styles.avatar}
+                        />
+                    ) : (
+                        <View style={styles.avatarPlaceholder}>
+                            <Text style={styles.avatarText}>
+                                {displayedUser.name?.charAt(0) || "م"}
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
-                <Text style={styles.userName}>{user?.name || "زائر"}</Text>
-                <Text style={styles.userEmail}>{user?.email || "زائر"}</Text>
+                <Text style={styles.userName}>
+                    {displayedUser.name || "مستخدم"}
+                </Text>
+                <Text style={styles.userEmail}>
+                    {displayedUser.email || ""}
+                </Text>
 
-                {/* الإحصائيات */}
-                <View style={styles.statsContainer}>
-                    <TouchableOpacity style={styles.statItem}>
-                        <Text style={styles.statNumber}>{stats.projectsCount}</Text>
-                        <Text style={styles.statLabel}>المشاريع</Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.statDivider} />
-
-                    {/* admin extra stats */}
-                    {currentUser?.role === "admin" && (
-                        <>
-                            <TouchableOpacity style={styles.statItem}>
-                                <Text style={styles.statNumber}>{stats.ratedCount}</Text>
-                                <Text style={styles.statLabel}>المقيمة</Text>
-                            </TouchableOpacity>
-                            <View style={styles.statDivider} />
-                            <TouchableOpacity style={styles.statItem}>
-                                <Text style={styles.statNumber}>{stats.unratedCount}</Text>
-                                <Text style={styles.statLabel}>غير المقيمة</Text>
-                            </TouchableOpacity>
-                            <View style={styles.statDivider} />
-                        </>
-                    )}
-
+                <View style={styles.statsRow}>
                     <TouchableOpacity
                         style={styles.statItem}
                         onPress={() =>
-                            router.push(`/profile/followers/${user?._id}`)
+                            router.push(
+                                `/profile/projects?userId=${displayedUser._id}`,
+                            )
+                        }
+                    >
+                        <Text style={styles.statNumber}>
+                            {stats.projectsCount}
+                        </Text>
+                        <Text style={styles.statLabel}>المشاريع</Text>
+                    </TouchableOpacity>
+                    <View style={styles.divider} />
+                    <TouchableOpacity
+                        style={styles.statItem}
+                        onPress={() =>
+                            router.push(
+                                `/profile/followers?userId=${displayedUser._id}`,
+                            )
                         }
                     >
                         <Text style={styles.statNumber}>
@@ -293,13 +331,13 @@ export default function ProfileScreen() {
                         </Text>
                         <Text style={styles.statLabel}>المتابعون</Text>
                     </TouchableOpacity>
-
-                    <View style={styles.statDivider} />
-
+                    <View style={styles.divider} />
                     <TouchableOpacity
                         style={styles.statItem}
                         onPress={() =>
-                            router.push(`/profile/following/${user?._id}`)
+                            router.push(
+                                `/profile/following?userId=${displayedUser._id}`,
+                            )
                         }
                     >
                         <Text style={styles.statNumber}>
@@ -307,135 +345,28 @@ export default function ProfileScreen() {
                         </Text>
                         <Text style={styles.statLabel}>يتابع</Text>
                     </TouchableOpacity>
-
-                    <View style={styles.statDivider} />
-
-                    <TouchableOpacity style={styles.statItem}>
-                        <Text style={styles.statNumber}>
-                            {stats.likesCount}
-                        </Text>
-                        <Text style={styles.statLabel}>الإعجابات</Text>
-                    </TouchableOpacity>
                 </View>
 
-                {/* زر المتابعة أو التعديل */}
-                {isOwnProfile ? (
-                    <TouchableOpacity
-                        style={styles.editButton}
-                        onPress={() => router.push("/profile/edit")}
-                    >
-                        <Text style={styles.editButtonText}>
-                            تعديل الملف الشخصي
-                        </Text>
-                    </TouchableOpacity>
-                ) : (
+                {/* زر المتابعة للمستخدمين الآخرين */}
+                {!isOwnProfile && (
                     <TouchableOpacity
                         style={[
                             styles.followButton,
-                            isFollowing && styles.unfollowButton,
+                            isFollowing && styles.followingButton,
                         ]}
                         onPress={handleFollow}
                     >
                         <Text
                             style={[
                                 styles.followButtonText,
-                                isFollowing && styles.unfollowButtonText,
+                                isFollowing && styles.followingButtonText,
                             ]}
                         >
                             {isFollowing ? "إلغاء المتابعة" : "متابعة"}
                         </Text>
                     </TouchableOpacity>
                 )}
-
-                {user?.bio ? (
-                    <View style={styles.bioContainer}>
-                        <Text style={styles.bioText}>{user.bio}</Text>
-                    </View>
-                ) : isOwnProfile ? (
-                    <TouchableOpacity
-                        style={styles.addBioButton}
-                        onPress={() => router.push("/profile/edit")}
-                    >
-                        <Ionicons name="add" size={16} color="#007AFF" />
-                        <Text style={styles.addBioText}>أضف نبذة عنك</Text>
-                    </TouchableOpacity>
-                ) : null}
             </View>
-
-            {/* قائمة الخيارات - للمستخدم الحالي فقط */}
-            {isOwnProfile && (
-                <View style={styles.optionsSection}>
-                    <TouchableOpacity
-                        style={styles.optionItem}
-                        onPress={() => router.push("/profile/edit")}
-                    >
-                        <View style={styles.optionLeft}>
-                            <Ionicons
-                                name="person-outline"
-                                size={22}
-                                color="#007AFF"
-                            />
-                            <Text style={styles.optionText}>
-                                تعديل الملف الشخصي
-                            </Text>
-                        </View>
-                        <Ionicons
-                            name="chevron-forward"
-                            size={20}
-                            color="#8E8E93"
-                        />
-                    </TouchableOpacity>
-
-                    {/* Hide 'مشاريعي' for admin accounts */}
-                    {currentUser?.role !== "admin" && (
-                        <TouchableOpacity style={styles.optionItem} onPress={() => router.push("/profile/projects")}>
-                            <View style={styles.optionLeft}>
-                                <Ionicons name="folder-outline" size={22} color="#007AFF" />
-                                <Text style={styles.optionText}>مشاريعي</Text>
-                            </View>
-                            <Ionicons name="chevron-forward" size={20} color="#8E8E93" />
-                        </TouchableOpacity>
-                    )}
-
-                    <TouchableOpacity
-                        style={styles.optionItem}
-                        onPress={() => router.push("/profile/followers")}
-                    >
-                        <View style={styles.optionLeft}>
-                            <Ionicons
-                                name="people-outline"
-                                size={22}
-                                color="#007AFF"
-                            />
-                            <Text style={styles.optionText}>المتابعون</Text>
-                        </View>
-                        <Ionicons
-                            name="chevron-forward"
-                            size={20}
-                            color="#8E8E93"
-                        />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={styles.optionItem}
-                        onPress={() => router.push("/profile/settings")}
-                    >
-                        <View style={styles.optionLeft}>
-                            <Ionicons
-                                name="settings-outline"
-                                size={22}
-                                color="#007AFF"
-                            />
-                            <Text style={styles.optionText}>الإعدادات</Text>
-                        </View>
-                        <Ionicons
-                            name="chevron-forward"
-                            size={20}
-                            color="#8E8E93"
-                        />
-                    </TouchableOpacity>
-                </View>
-            )}
         </ScrollView>
     );
 }
@@ -447,33 +378,49 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
+    errorContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 20,
+    },
+    errorText: {
+        fontSize: 16,
+        color: "#FF3B30",
+        marginBottom: 12,
+        textAlign: "center",
+    },
+    retryButton: {
+        backgroundColor: "#007AFF",
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 8,
+    },
+    retryText: { color: "#fff", fontWeight: "600" },
     header: {
         flexDirection: "row",
-        alignItems: "center",
         justifyContent: "space-between",
-        backgroundColor: "#fff",
-        paddingHorizontal: 20,
+        alignItems: "center",
         paddingTop: 60,
         paddingBottom: 20,
+        paddingHorizontal: 20,
+        backgroundColor: "#fff",
     },
     backButton: { padding: 5 },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: "600",
-        color: "#1D1D1F",
-    },
+    headerTitle: { fontSize: 20, fontWeight: "600" },
+    headerButtons: { flexDirection: "row", gap: 10 },
+    editButton: { padding: 5 },
     logoutButton: { padding: 5 },
-    profileSection: {
+    profileCard: {
         backgroundColor: "#fff",
+        margin: 15,
+        borderRadius: 20,
+        padding: 20,
         alignItems: "center",
-        paddingVertical: 30,
-        marginTop: 10,
     },
-    avatarContainer: {
-        position: "relative",
-        marginBottom: 15,
-    },
-    avatar: {
+    avatarContainer: { marginBottom: 12 },
+    avatar: { width: 100, height: 100, borderRadius: 50 },
+    avatarPlaceholder: {
         width: 100,
         height: 100,
         borderRadius: 50,
@@ -481,133 +428,37 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-    avatarText: {
-        fontSize: 36,
-        color: "#fff",
-        fontWeight: "bold",
-    },
-    userName: {
-        fontSize: 24,
-        fontWeight: "bold",
-        color: "#1D1D1F",
-        marginBottom: 5,
-    },
-    userEmail: {
-        fontSize: 16,
-        color: "#8E8E93",
-        marginBottom: 20,
-    },
-    statsContainer: {
+    avatarText: { fontSize: 40, color: "#fff", fontWeight: "bold" },
+    userName: { fontSize: 22, fontWeight: "bold" },
+    userEmail: { fontSize: 14, color: "#8E8E93", marginBottom: 10 },
+    statsRow: {
         flexDirection: "row",
-        backgroundColor: "#F2F2F7",
-        borderRadius: 12,
-        paddingVertical: 15,
-        paddingHorizontal: 30,
-        marginBottom: 20,
-        width: "90%",
+        width: "100%",
         justifyContent: "space-around",
+        marginTop: 20,
     },
-    statItem: {
-        alignItems: "center",
-        flex: 1,
-    },
-    statNumber: {
-        fontSize: 20,
-        fontWeight: "bold",
-        color: "#007AFF",
-    },
-    statLabel: {
-        fontSize: 12,
-        color: "#8E8E93",
-        marginTop: 5,
-    },
-    statDivider: {
-        width: 1,
-        height: 40,
-        backgroundColor: "#E5E5EA",
-    },
-    editButton: {
-        backgroundColor: "#007AFF",
-        paddingHorizontal: 30,
-        paddingVertical: 12,
-        borderRadius: 25,
-        marginBottom: 20,
-    },
-    editButtonText: {
-        color: "#fff",
-        fontSize: 16,
-        fontWeight: "600",
-    },
+    statItem: { alignItems: "center", flex: 1 },
+    statNumber: { fontSize: 18, fontWeight: "bold", color: "#007AFF" },
+    statLabel: { fontSize: 12, color: "#8E8E93" },
+    divider: { width: 1, height: 30, backgroundColor: "#E5E5EA" },
     followButton: {
         backgroundColor: "#007AFF",
-        paddingHorizontal: 40,
-        paddingVertical: 12,
+        paddingHorizontal: 30,
+        paddingVertical: 10,
         borderRadius: 25,
-        marginBottom: 20,
+        marginTop: 20,
     },
-    unfollowButton: {
-        backgroundColor: "#F2F2F7",
+    followingButton: {
+        backgroundColor: "#fff",
         borderWidth: 1,
-        borderColor: "#E5E5EA",
+        borderColor: "#007AFF",
     },
     followButtonText: {
         color: "#fff",
         fontSize: 16,
         fontWeight: "600",
     },
-    unfollowButtonText: {
-        color: "#1D1D1F",
-    },
-    bioContainer: {
-        backgroundColor: "#F2F2F7",
-        padding: 15,
-        borderRadius: 12,
-        width: "90%",
-    },
-    bioText: {
-        fontSize: 14,
-        color: "#666",
-        textAlign: "center",
-        lineHeight: 22,
-    },
-    addBioButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "#F2F2F7",
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 20,
-    },
-    addBioText: {
+    followingButtonText: {
         color: "#007AFF",
-        fontSize: 14,
-        marginLeft: 5,
-        fontWeight: "500",
-    },
-    optionsSection: {
-        backgroundColor: "#fff",
-        marginTop: 15,
-        marginHorizontal: 15,
-        borderRadius: 12,
-        overflow: "hidden",
-    },
-    optionItem: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: 18,
-        borderBottomWidth: 1,
-        borderBottomColor: "#F2F2F7",
-    },
-    optionLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        flex: 1,
-    },
-    optionText: {
-        fontSize: 16,
-        color: "#1D1D1F",
-        marginLeft: 12,
-        flex: 1,
     },
 });

@@ -1,6 +1,5 @@
 // app/tabs/create.js
 import { useState, useEffect } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     View,
     Text,
@@ -10,221 +9,176 @@ import {
     ScrollView,
     Alert,
     ActivityIndicator,
+    Image,
 } from "react-native";
 import { router } from "expo-router";
-import { projectsAPI, checkAuthStatus } from "../../src/services/api";
+import * as ImagePicker from "expo-image-picker";
+import { projectsAPI } from "../../src/services/api";
+import { useAuth } from "../../src/context/AuthContext";
+import { Ionicons } from "@expo/vector-icons";
+
+const CATEGORIES = [
+    { label: "ويب", value: "web" },
+    { label: "موبايل", value: "mobile" },
+    { label: "ذكاء اصطناعي", value: "ai" },
+    { label: "تصميم", value: "design" },
+    { label: "أخرى", value: "other" },
+];
 
 export default function Create() {
-    const CATEGORIES = [
-        { label: "عام", value: "other" },
-        { label: "تطوير ويب", value: "web" },
-        { label: "تصميم", value: "design" },
-        { label: "موبايل", value: "mobile" },
-        { label: "ذكاء اصطناعي", value: "ai" },
-    ];
-
+    const { user } = useAuth();
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
-    const [budget, setBudget] = useState("");
-    const [deadline, setDeadline] = useState("");
-    const [category, setCategory] = useState(CATEGORIES[1].value);
+    const [shortDescription, setShortDescription] = useState("");
+    const [category, setCategory] = useState(CATEGORIES[0].value);
+    const [tags, setTags] = useState("");
+    const [technologies, setTechnologies] = useState("");
+    const [demoUrl, setDemoUrl] = useState("");
+    const [githubUrl, setGithubUrl] = useState("");
+    const [images, setImages] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [isAdmin, setIsAdmin] = useState(false);
 
-    // load user and check role to prevent admins from creating projects
+    // التحقق من أن المستخدم طالب
     useEffect(() => {
-        let mounted = true;
-        AsyncStorage.getItem("user")
-            .then((str) => {
-                if (!mounted) return;
-                if (!str) return;
-                try {
-                    const u = JSON.parse(str);
-                    if (u && u.role === "admin") setIsAdmin(true);
-                } catch (e) {
-                    // ignore
-                }
-            })
-            .catch(() => {});
-        return () => (mounted = false);
-    }, []);
+        if (user && user.role !== "student") {
+            Alert.alert("غير مسموح", "فقط الطلاب يمكنهم إنشاء مشاريع", [
+                { text: "عودة", onPress: () => router.back() },
+            ]);
+        }
+    }, [user]);
 
-    // app/tabs/create.js (تعديل دالة handleCreate)
+    const pickImages = async () => {
+        const permission =
+            await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+            Alert.alert("صلاحية مطلوبة", "الرجاء السماح بالوصول إلى الصور");
+            return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsMultipleSelection: true,
+            quality: 0.8,
+        });
+        if (!result.canceled) {
+            setImages(result.assets);
+        }
+    };
+
+    const removeImage = (index) => {
+        setImages((prev) => prev.filter((_, i) => i !== index));
+    };
+
     const handleCreate = async () => {
-        // 🔥 **التحقق من التوكن مباشرة بدلاً من checkAuthStatus**
-        const token = await AsyncStorage.getItem("authToken");
-        if (!token) {
-            Alert.alert(
-                "غير مسجل دخول",
-                "يجب تسجيل الدخول أولاً لإنشاء مشروع",
-                [
-                    { text: "إلغاء", style: "cancel" },
-                    {
-                        text: "تسجيل الدخول",
-                        onPress: () => router.push("/auth/login"),
-                    },
-                ],
-            );
-            return;
-        }
-
-        if (!title.trim()) {
-            Alert.alert("خطأ", "يرجى إدخال عنوان للمشروع");
-            return;
-        }
-        if (!description.trim()) {
-            Alert.alert("خطأ", "يرجى إدخال وصف للمشروع");
+        if (!title.trim() || !description.trim()) {
+            Alert.alert("خطأ", "العنوان والوصف مطلوبان");
             return;
         }
 
         setLoading(true);
         try {
-            const projectData = {
-                title: title.trim(),
-                description: description.trim(),
-                budget: budget ? parseFloat(budget) : 0,
-                deadline: deadline.trim() || null,
-                category: category || "web",
-                status: "قيد التخطيط",
-            };
+            const formData = new FormData();
+            formData.append("title", title.trim());
+            formData.append("description", description.trim());
+            if (shortDescription)
+                formData.append("shortDescription", shortDescription.trim());
+            formData.append("category", category);
+            tags.split(",")
+                .map((t) => t.trim())
+                .filter((t) => t)
+                .forEach((t) => formData.append("tags", t));
+            technologies
+                .split(",")
+                .map((t) => t.trim())
+                .filter((t) => t)
+                .forEach((t) => formData.append("technologies", t));
+            if (demoUrl) formData.append("demoUrl", demoUrl.trim());
+            if (githubUrl) formData.append("githubUrl", githubUrl.trim());
 
-            console.log("📤 إرسال بيانات المشروع:", projectData);
-            const response = await projectsAPI.create(projectData);
-            console.log("📥 استجابة إنشاء المشروع:", response);
+            images.forEach((img, idx) => {
+                const uri = img.uri;
+                const filename = uri.split("/").pop();
+                const match = /\.(\w+)$/.exec(filename);
+                const type = match ? `image/${match[1]}` : "image/jpeg";
+                formData.append("images", { uri, name: filename, type });
+            });
 
-            // إذا أعاد الخادم الكائن المنشأ أو معرفه نفترض النجاح
-            const createdId =
-                response?._id || response?.id || response?.data?._id || null;
-
-            // إعادة تعيين الحقول والتنقل فوراً عند النجاح
-            if (createdId || response) {
-                setTitle("");
-                setDescription("");
-                setBudget("");
-                setDeadline("");
-                setCategory(CATEGORIES[1].value);
-                router.push("/tabs/home");
-            } else {
-                Alert.alert(
-                    "تنبيه",
-                    "لم يتم إنشاء المشروع. تحقق من الكونسول للمزيد.",
-                );
-            }
+            await projectsAPI.create(formData);
+            Alert.alert("نجاح", "تم إنشاء المشروع وهو بانتظار مراجعة المشرف", [
+                {
+                    text: "حسناً",
+                    onPress: () => router.push("/profile/projects"),
+                },
+            ]);
         } catch (error) {
-            console.error("❌ خطأ في إنشاء المشروع:", error);
-
-            let errorMessage = "فشل إنشاء المشروع. يرجى المحاولة مرة أخرى";
-
-            if (error.response) {
-                console.error("🔴 تفاصيل الخطأ:", error.response.data);
-
-                if (error.response.status === 401) {
-                    errorMessage = "انتهت جلستك. يرجى تسجيل الدخول مرة أخرى";
-                    // مسح التخزين وإعادة التوجيه
-                    await AsyncStorage.clear();
-                    router.push("/auth/login");
-                } else if (error.response.data?.errors) {
-                    const validationErrors = error.response.data.errors
-                        .map((err) => err.msg)
-                        .join("\n");
-                    errorMessage = validationErrors;
-                } else if (error.response.data?.message) {
-                    errorMessage = error.response.data.message;
-                }
-            }
-
-            Alert.alert("خطأ", errorMessage);
+            Alert.alert(
+                "خطأ",
+                error.response?.data?.message || "فشل إنشاء المشروع",
+            );
         } finally {
             setLoading(false);
         }
     };
-    if (isAdmin) {
+
+    if (user?.role !== "student") {
         return (
-            <View
-                style={{
-                    flex: 1,
-                    justifyContent: "center",
-                    alignItems: "center",
-                }}
-            >
-                <Text style={{ fontSize: 18, marginBottom: 12 }}>
-                    لا يمكنك إنشاء مشاريع كمشرف
+            <View style={styles.centered}>
+                <Text style={styles.errorText}>
+                    عذراً، فقط الطلاب يمكنهم إنشاء مشاريع.
                 </Text>
                 <TouchableOpacity
-                    style={styles.cancelButton}
                     onPress={() => router.back()}
+                    style={styles.button}
                 >
-                    <Text style={styles.cancelButtonText}>عودة</Text>
+                    <Text>عودة</Text>
                 </TouchableOpacity>
             </View>
         );
     }
 
     return (
-        <ScrollView
-            style={styles.container}
-            showsVerticalScrollIndicator={false}
-        >
+        <ScrollView style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.title}>إنشاء مشروع جديد</Text>
+                <Text style={styles.note}>
+                    سيتم مراجعة المشروع من قبل المشرف قبل النشر
+                </Text>
             </View>
 
             <View style={styles.form}>
-                <Text style={styles.label}>عنوان المشروع *</Text>
+                {/* الحقول كما هي من قبل، مع إضافة شرط loading */}
+                <Text style={styles.label}>العنوان *</Text>
                 <TextInput
                     style={styles.input}
-                    placeholder="أدخل عنوان المشروع"
-                    placeholderTextColor="#999"
                     value={title}
                     onChangeText={setTitle}
                     editable={!loading}
                 />
 
-                <Text style={styles.label}>وصف المشروع</Text>
+                <Text style={styles.label}>الوصف الطويل *</Text>
                 <TextInput
                     style={[styles.input, styles.textArea]}
-                    placeholder="أدخل وصف المشروع (اختياري)"
-                    placeholderTextColor="#999"
                     value={description}
                     onChangeText={setDescription}
                     multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
                     editable={!loading}
                 />
 
-                <Text style={styles.label}>الميزانية (ريال)</Text>
+                <Text style={styles.label}>وصف مختصر</Text>
                 <TextInput
                     style={styles.input}
-                    placeholder="أدخل الميزانية (اختياري)"
-                    placeholderTextColor="#999"
-                    value={budget}
-                    onChangeText={setBudget}
-                    keyboardType="numeric"
+                    value={shortDescription}
+                    onChangeText={setShortDescription}
                     editable={!loading}
+                    maxLength={150}
                 />
 
-                <Text style={styles.label}>تاريخ التسليم</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="YYYY-MM-DD (اختياري)"
-                    placeholderTextColor="#999"
-                    value={deadline}
-                    onChangeText={setDeadline}
-                    editable={!loading}
-                />
-
-                <Text style={styles.label}>التصنيف</Text>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginBottom: 20 }}
-                >
+                <Text style={styles.label}>الفئة</Text>
+                <ScrollView horizontal style={styles.categories}>
                     {CATEGORIES.map((cat) => (
                         <TouchableOpacity
                             key={cat.value}
                             style={[
-                                styles.categoryButton,
+                                styles.category,
                                 category === cat.value &&
                                     styles.categorySelected,
                             ]}
@@ -244,36 +198,86 @@ export default function Create() {
                     ))}
                 </ScrollView>
 
-                <View style={styles.note}>
-                    <Text style={styles.noteText}>* الحقول المطلوبة</Text>
-                    <Text style={styles.noteText}>
-                        سيتم حفظ المشروع في قاعدة البيانات
-                    </Text>
-                </View>
+                <Text style={styles.label}>الوسوم (مفصولة بفواصل)</Text>
+                <TextInput
+                    style={styles.input}
+                    value={tags}
+                    onChangeText={setTags}
+                    editable={!loading}
+                    placeholder="مثال: react, node"
+                />
+
+                <Text style={styles.label}>التقنيات</Text>
+                <TextInput
+                    style={styles.input}
+                    value={technologies}
+                    onChangeText={setTechnologies}
+                    editable={!loading}
+                    placeholder="مثال: JavaScript, Firebase"
+                />
+
+                <Text style={styles.label}>رابط العرض</Text>
+                <TextInput
+                    style={styles.input}
+                    value={demoUrl}
+                    onChangeText={setDemoUrl}
+                    editable={!loading}
+                    keyboardType="url"
+                />
+
+                <Text style={styles.label}>رابط GitHub</Text>
+                <TextInput
+                    style={styles.input}
+                    value={githubUrl}
+                    onChangeText={setGithubUrl}
+                    editable={!loading}
+                    keyboardType="url"
+                />
 
                 <TouchableOpacity
-                    style={[
-                        styles.createButton,
-                        loading && styles.buttonDisabled,
-                    ]}
+                    style={styles.imagePicker}
+                    onPress={pickImages}
+                    disabled={loading}
+                >
+                    <Ionicons name="images-outline" size={24} color="#007AFF" />
+                    <Text style={styles.imagePickerText}>
+                        اختر صوراً (اختياري)
+                    </Text>
+                </TouchableOpacity>
+
+                {images.length > 0 && (
+                    <View style={styles.imagesContainer}>
+                        {images.map((img, idx) => (
+                            <View key={idx} style={styles.imageWrapper}>
+                                <Image
+                                    source={{ uri: img.uri }}
+                                    style={styles.thumbnail}
+                                />
+                                <TouchableOpacity
+                                    onPress={() => removeImage(idx)}
+                                    style={styles.removeImage}
+                                >
+                                    <Ionicons
+                                        name="close-circle"
+                                        size={24}
+                                        color="#FF3B30"
+                                    />
+                                </TouchableOpacity>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                <TouchableOpacity
+                    style={styles.submitButton}
                     onPress={handleCreate}
                     disabled={loading}
                 >
                     {loading ? (
                         <ActivityIndicator color="#fff" />
                     ) : (
-                        <Text style={styles.createButtonText}>
-                            إنشاء المشروع
-                        </Text>
+                        <Text style={styles.submitText}>إنشاء المشروع</Text>
                     )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => router.back()}
-                    disabled={loading}
-                >
-                    <Text style={styles.cancelButtonText}>إلغاء</Text>
                 </TouchableOpacity>
             </View>
         </ScrollView>
@@ -281,101 +285,89 @@ export default function Create() {
 }
 
 const styles = StyleSheet.create({
-    container: {
+    container: { flex: 1, backgroundColor: "#F2F2F7" },
+    centered: {
         flex: 1,
-        backgroundColor: "#F2F2F7",
-    },
-    header: {
-        backgroundColor: "#fff",
-        paddingHorizontal: 20,
-        paddingTop: 60,
-        paddingBottom: 20,
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: "bold",
-        color: "#1D1D1F",
-    },
-    form: {
+        justifyContent: "center",
+        alignItems: "center",
         padding: 20,
     },
+    errorText: {
+        fontSize: 18,
+        color: "#FF3B30",
+        marginBottom: 20,
+        textAlign: "center",
+    },
+    button: { backgroundColor: "#007AFF", padding: 15, borderRadius: 10 },
+    header: {
+        backgroundColor: "#007AFF",
+        padding: 20,
+        paddingTop: 60,
+        alignItems: "center",
+    },
+    title: { fontSize: 24, fontWeight: "bold", color: "#fff" },
+    note: { fontSize: 14, color: "rgba(255,255,255,0.8)", marginTop: 5 },
+    form: { padding: 20 },
     label: {
         fontSize: 16,
         fontWeight: "600",
-        color: "#1D1D1F",
         marginBottom: 8,
+        color: "#1D1D1F",
     },
     input: {
         backgroundColor: "#fff",
-        borderWidth: 1,
-        borderColor: "#E5E5EA",
         borderRadius: 12,
-        padding: 16,
-        fontSize: 16,
-        marginBottom: 20,
-        color: "#000",
-    },
-    textArea: {
-        height: 120,
-        textAlignVertical: "top",
-    },
-    note: {
-        backgroundColor: "#F9F9F9",
         padding: 15,
-        borderRadius: 10,
         marginBottom: 20,
-    },
-    noteText: {
-        fontSize: 14,
-        color: "#8E8E93",
-        marginBottom: 5,
-    },
-    createButton: {
-        backgroundColor: "#007AFF",
-        padding: 18,
-        borderRadius: 12,
-        alignItems: "center",
-        marginBottom: 10,
-    },
-    buttonDisabled: {
-        backgroundColor: "#C7C7CC",
-    },
-    createButtonText: {
-        color: "#fff",
-        fontSize: 18,
-        fontWeight: "600",
-    },
-    cancelButton: {
         borderWidth: 1,
         borderColor: "#E5E5EA",
-        padding: 18,
-        borderRadius: 12,
-        alignItems: "center",
     },
-    cancelButtonText: {
-        color: "#FF3B30",
-        fontSize: 18,
-        fontWeight: "600",
-    },
-    categoryButton: {
+    textArea: { height: 120, textAlignVertical: "top" },
+    categories: { flexDirection: "row", marginBottom: 20 },
+    category: {
         backgroundColor: "#fff",
-        borderWidth: 1,
-        borderColor: "#E5E5EA",
+        paddingHorizontal: 15,
         paddingVertical: 8,
-        paddingHorizontal: 14,
         borderRadius: 20,
         marginRight: 10,
+        borderWidth: 1,
+        borderColor: "#E5E5EA",
     },
-    categorySelected: {
-        backgroundColor: "#007AFF",
+    categorySelected: { backgroundColor: "#007AFF", borderColor: "#007AFF" },
+    categoryText: { fontSize: 14, color: "#1D1D1F" },
+    categoryTextSelected: { color: "#fff" },
+    imagePicker: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#fff",
+        borderWidth: 1,
         borderColor: "#007AFF",
+        borderRadius: 12,
+        padding: 15,
+        marginBottom: 20,
     },
-    categoryText: {
-        color: "#1D1D1F",
-        fontSize: 14,
-        fontWeight: "600",
+    imagePickerText: { marginLeft: 8, color: "#007AFF", fontSize: 16 },
+    imagesContainer: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        marginBottom: 20,
     },
-    categoryTextSelected: {
-        color: "#fff",
+    imageWrapper: { position: "relative", marginRight: 10, marginBottom: 10 },
+    thumbnail: { width: 80, height: 80, borderRadius: 8 },
+    removeImage: {
+        position: "absolute",
+        top: -5,
+        right: -5,
+        backgroundColor: "#fff",
+        borderRadius: 12,
     },
+    submitButton: {
+        backgroundColor: "#007AFF",
+        padding: 18,
+        borderRadius: 12,
+        alignItems: "center",
+        marginTop: 10,
+    },
+    submitText: { color: "#fff", fontSize: 18, fontWeight: "600" },
 });

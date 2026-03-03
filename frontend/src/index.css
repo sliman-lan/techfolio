@@ -173,3 +173,58 @@ body {
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
+.project-images .thumbnail:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+    transition: all 0.2s ease;
+}
+
+.project-images .thumbnail.active {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+/* للـ carousel */
+.carousel-control-prev,
+.carousel-control-next {
+    width: 10%;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0;
+}
+
+.carousel-control-prev:hover,
+.carousel-control-next:hover {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+/* تحسين ظهور المودال */
+.auth-modal-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background-color: rgba(0, 0, 0, 0.7) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+}
+
+.auth-modal-content {
+    background-color: white !important;
+    border-radius: 16px !important;
+    padding: 32px !important;
+    max-width: 400px !important;
+    width: 90% !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    position: relative !important;
+    z-index: 10000 !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* منع التمرير في الصفحة الخلفية */
+body.modal-open {
+    overflow: hidden !important;
+}
