@@ -1,77 +1,191 @@
-// backend/server.js
+// api/server.js
 const express = require("express");
 const path = require("path");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const connectDB = require("./config/db");
+const mongoose = require("mongoose");
 const fs = require("fs");
 
 dotenv.config();
-connectDB();
 
 const app = express();
 
-// CORS
-app.use(cors());
+// ✅ CORS متقدم لجميع المنافذ
+app.use(
+    cors({
+        origin: [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:3000",
+            "https://techfolio-kohl.vercel.app",
+        ],
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    }),
+);
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.options("*", cors());
 
-// التأكد من وجود المجلدات
-const uploadsDir = path.join(__dirname, "uploads");
-const avatarsDir = path.join(__dirname, "uploads", "avatars");
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    console.log("📁 تم إنشاء مجلد uploads");
+// ✅ اتصال MongoDB المحسّن لـ Vercel
+let cached = global.mongoose;
+if (!cached) {
+    cached = global.mongoose = { conn: null, promise: null };
 }
-if (!fs.existsSync(avatarsDir)) {
-    fs.mkdirSync(avatarsDir, { recursive: true });
-    console.log("📁 تم إنشاء مجلد uploads/avatars");
+
+async function connectDB() {
+    if (cached.conn) {
+        console.log("✅ استخدام اتصال MongoDB موجود");
+        return cached.conn;
+    }
+
+    if (!cached.promise) {
+        console.log("🔄 إنشاء اتصال جديد بـ MongoDB...");
+        cached.promise = mongoose
+            .connect(process.env.MONGODB_URI, {
+                bufferCommands: false,
+            })
+            .then((mongoose) => {
+                console.log("✅ تم الاتصال بـ MongoDB بنجاح");
+                return mongoose;
+            })
+            .catch((err) => {
+                console.error("❌ فشل اتصال MongoDB:", err);
+                throw err;
+            });
+    }
+
+    cached.conn = await cached.promise;
+    return cached.conn;
 }
 
-// المسارات الثابتة - تأكد من المسار الصحيح
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-console.log("📁 Static files served from:", path.join(__dirname, "uploads"));
+// ✅ استيراد المسارات
+const authRoutes = require("../routes/auth");
+const usersRoutes = require("../routes/users");
+const projectsRoutes = require("../routes/projects");
+const likeRoutes = require("../routes/like");
+const followRoutes = require("../routes/follow");
+const commentRoutes = require("../routes/comment");
+const notificationRoutes = require("../routes/notification");
 
-// مسارات API
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/users", require("./routes/users"));
-app.use("/api/projects", require("./routes/projects"));
+// ✅ استخدام المسارات مع التأكد من اتصال قاعدة البيانات
+app.use(
+    "/api/auth",
+    async (req, res, next) => {
+        try {
+            await connectDB();
+            next();
+        } catch (err) {
+            res.status(500).json({ error: "فشل الاتصال بقاعدة البيانات" });
+        }
+    },
+    authRoutes,
+);
 
-// like routes
-app.use("/api/projects", require("./routes/like"));
-app.use("/api/follow", require("./routes/follow"));
-app.use("/api/comments", require("./routes/comment"));
-app.use("/api/notifications", require("./routes/notification"));
+app.use(
+    "/api/users",
+    async (req, res, next) => {
+        try {
+            await connectDB();
+            next();
+        } catch (err) {
+            res.status(500).json({ error: "فشل الاتصال بقاعدة البيانات" });
+        }
+    },
+    usersRoutes,
+);
+
+app.use(
+    "/api/projects",
+    async (req, res, next) => {
+        try {
+            await connectDB();
+            next();
+        } catch (err) {
+            res.status(500).json({ error: "فشل الاتصال بقاعدة البيانات" });
+        }
+    },
+    projectsRoutes,
+);
+
+app.use(
+    "/api/follow",
+    async (req, res, next) => {
+        try {
+            await connectDB();
+            next();
+        } catch (err) {
+            res.status(500).json({ error: "فشل الاتصال بقاعدة البيانات" });
+        }
+    },
+    followRoutes,
+);
+
+app.use(
+    "/api/comments",
+    async (req, res, next) => {
+        try {
+            await connectDB();
+            next();
+        } catch (err) {
+            res.status(500).json({ error: "فشل الاتصال بقاعدة البيانات" });
+        }
+    },
+    commentRoutes,
+);
+
+app.use(
+    "/api/notifications",
+    async (req, res, next) => {
+        try {
+            await connectDB();
+            next();
+        } catch (err) {
+            res.status(500).json({ error: "فشل الاتصال بقاعدة البيانات" });
+        }
+    },
+    notificationRoutes,
+);
 
 // صفحة الترحيب
 app.get("/", (req, res) => {
-    res.json({ message: "API is running", time: new Date().toISOString() });
-});
-
-// صفحة اختبار
-app.get("/api/test", (req, res) => {
-    res.json({ status: "success", message: "API working" });
-});
-
-// endpoint تجريبي للصور
-app.get("/test-upload", (req, res) => {
-    const avatarsPath = path.join(__dirname, "uploads", "avatars");
-    const files = fs.readdirSync(avatarsPath);
     res.json({
-        message: "Uploads folder",
-        avatarsPath,
-        files,
-        staticUrl: "/uploads/avatars/",
+        message: "TechFolio API is running on Vercel",
+        time: new Date().toISOString(),
     });
 });
 
-// تشغيل الخادم
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
-    console.log(`✅ Uploads folder: ${path.join(__dirname, "uploads")}`);
-    console.log(`✅ Test uploads: http://localhost:${PORT}/test-upload`);
+// صفحة اختبار
+app.get("/api/test", async (req, res) => {
+    try {
+        await connectDB();
+        res.json({
+            status: "success",
+            message: "API working",
+            db: "connected",
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: "error",
+            message: "Database connection failed",
+            error: error.message,
+        });
+    }
 });
+
+// ✅ للاختبار المحلي فقط
+if (process.env.NODE_ENV !== "production") {
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, "0.0.0.0", () => {
+        console.log(`✅ Server running on http://localhost:${PORT}`);
+        connectDB();
+    });
+}
+
+module.exports = app;

@@ -5,6 +5,7 @@ const api = axios.create({
     baseURL:
         process.env.REACT_APP_API_BASE ||
         "https://techfolio-kohl.vercel.app/api",
+    withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
