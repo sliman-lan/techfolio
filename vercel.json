@@ -1,6 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "src": "/api/$1" },
-    { "source": "/(.*)", "src": "/frontend/src/$1" }
+    { "src": "/api/(.*)", "destination": "https://techfolio-backend.onrender.com/api/$1" }
   ]
 }
