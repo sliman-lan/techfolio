@@ -20,6 +20,12 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
         toggleLike,
     } = useComments(id);
 
+    // حالات التقييم
+    const [userRating, setUserRating] = useState(null);
+    const [ratingValue, setRatingValue] = useState(5);
+    const [ratingComment, setRatingComment] = useState("");
+    const [submittingRating, setSubmittingRating] = useState(false);
+
     console.log("🔍 ProjectDetail props:", {
         id,
         asAdmin,
@@ -50,6 +56,19 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
             }
 
             console.log("✅ Project fetched successfully:", res.data);
+            const projectData = res.data?.data || res.data;
+
+            // التحقق من وجود تقييم سابق للمستخدم الحالي إذا كان معلمًا
+            if (user?.role === "teacher" && projectData?.ratings) {
+                const existingRating = projectData.ratings.find(
+                    (r) => r.userId?._id === user._id || r.userId === user._id,
+                );
+                if (existingRating) {
+                    setUserRating(existingRating);
+                    setRatingValue(existingRating.value);
+                    setRatingComment(existingRating.comment || "");
+                }
+            }
 
             // زيادة عدد المشاهدات (اختياري)
             try {
@@ -79,6 +98,29 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
                 .catch(() => {});
         }
     }, [project?.category, id]);
+
+    const handleRate = async () => {
+        if (!ratingValue) {
+            alert("الرجاء اختيار تقييم");
+            return;
+        }
+
+        setSubmittingRating(true);
+        try {
+            await projectsAPI.rate(id, {
+                value: ratingValue,
+                comment: ratingComment,
+            });
+            alert("✅ تم إضافة التقييم بنجاح");
+            // إعادة تحميل المشروع لتحديث التقييمات
+            await fetchProject();
+        } catch (err) {
+            console.error("❌ فشل إضافة التقييم:", err);
+            alert(err.response?.data?.message || "فشل إضافة التقييم");
+        } finally {
+            setSubmittingRating(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -121,6 +163,89 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
                 )}
 
                 <ProjectInfo project={project} navigate={navigate} />
+
+                {/* قسم التقييم (للمعلمين فقط) */}
+                {user?.role === "teacher" && project.status === "approved" && (
+                    <div className="card-body p-4 border-top">
+                        <h5 className="fw-bold mb-4">
+                            <i className="bi bi-star-fill text-warning me-2"></i>
+                            تقييم المشروع
+                        </h5>
+                        {userRating ? (
+                            <div className="bg-light p-3 rounded-3">
+                                <p className="mb-2">
+                                    <strong>تقييمك السابق:</strong>
+                                </p>
+                                <div className="d-flex align-items-center gap-2 mb-2">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <i
+                                            key={star}
+                                            className={`bi ${
+                                                star <= userRating.value
+                                                    ? "bi-star-fill text-warning"
+                                                    : "bi-star text-muted"
+                                            } fs-5`}
+                                        ></i>
+                                    ))}
+                                </div>
+                                {userRating.comment && (
+                                    <p className="text-muted mb-0">
+                                        "{userRating.comment}"
+                                    </p>
+                                )}
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="mb-3">
+                                    <label className="form-label fw-medium">
+                                        التقييم
+                                    </label>
+                                    <div className="d-flex align-items-center gap-2">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <i
+                                                key={star}
+                                                className={`bi ${
+                                                    star <= ratingValue
+                                                        ? "bi-star-fill text-warning"
+                                                        : "bi-star text-muted"
+                                                } fs-3`}
+                                                style={{ cursor: "pointer" }}
+                                                onClick={() =>
+                                                    setRatingValue(star)
+                                                }
+                                            ></i>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="mb-3">
+                                    <label className="form-label fw-medium">
+                                        تعليق (اختياري)
+                                    </label>
+                                    <textarea
+                                        className="form-control rounded-3"
+                                        rows="2"
+                                        placeholder="أضف تعليقك على المشروع..."
+                                        value={ratingComment}
+                                        onChange={(e) =>
+                                            setRatingComment(e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <button
+                                    className="btn btn-primary rounded-pill px-4"
+                                    onClick={handleRate}
+                                    disabled={submittingRating}
+                                >
+                                    {submittingRating ? (
+                                        <span className="spinner-border spinner-border-sm ms-2" />
+                                    ) : (
+                                        "إرسال التقييم"
+                                    )}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* قسم التعليقات */}
                 <div className="card-body p-4 border-top">

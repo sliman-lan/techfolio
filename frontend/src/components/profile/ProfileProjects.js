@@ -4,8 +4,10 @@ export default function ProfileProjects({
     isViewingOther,
     user,
     userProjects,
-    adminStats,
+    ratedProjects, // المشاريع التي قيمها المعلم
+    teacherStats, // إحصائيات المعلم
     onAddProject,
+    adminStats, // إحصائيات المشرف
     navigate,
     onEditProject,
     onDeleteProject,
@@ -13,6 +15,7 @@ export default function ProfileProjects({
     onRejectProject,
 }) {
     const isAdminView = user?.role === "admin" && !isViewingOther;
+    const isTeacherView = user?.role === "teacher" && !isViewingOther;
 
     return (
         <div className="card shadow-sm border-0 rounded-4">
@@ -23,9 +26,12 @@ export default function ProfileProjects({
                             ? "مشاريع المستخدم"
                             : isAdminView
                               ? "لوحة تحكم المشرف"
-                              : "مشاريعي"}
+                              : isTeacherView
+                                ? "إحصائيات التقييمات"
+                                : "مشاريعي"}
                     </h5>
-                    {!isViewingOther && user?.role !== "admin" && (
+                    {/* زر إضافة مشروع يظهر فقط للطلاب */}
+                    {!isViewingOther && user?.role === "student" && (
                         <button
                             className="btn btn-success rounded-pill d-flex align-items-center gap-2 px-4 py-2 shadow-sm"
                             onClick={onAddProject}
@@ -37,10 +43,16 @@ export default function ProfileProjects({
 
                 {isAdminView ? (
                     <AdminStats stats={adminStats} navigate={navigate} />
+                ) : isTeacherView ? (
+                    <TeacherStats
+                        stats={teacherStats}
+                        ratedProjects={ratedProjects}
+                        navigate={navigate}
+                    />
                 ) : userProjects.length === 0 ? (
                     <EmptyProjects isOwner={!isViewingOther} />
                 ) : (
-                    <div className="row g-4">
+                    <div className="row g-3">
                         {userProjects.map((p) => (
                             <ProjectCard
                                 key={p._id}
@@ -60,6 +72,84 @@ export default function ProfileProjects({
         </div>
     );
 }
+
+// مكون إحصائيات المعلم
+const TeacherStats = ({ stats, ratedProjects, navigate }) => (
+    <div>
+        <div className="row g-3 mb-4">
+            <div className="col-6">
+                <div className="bg-primary bg-opacity-10 rounded-4 p-3 text-center">
+                    <div className="h3 fw-bold text-primary mb-0">
+                        {stats?.totalRatings || 0}
+                    </div>
+                    <div className="small text-muted">تقييمات قدمتها</div>
+                </div>
+            </div>
+            <div className="col-6">
+                <div className="bg-success bg-opacity-10 rounded-4 p-3 text-center">
+                    <div className="h3 fw-bold text-success mb-0">
+                        {stats?.averageRating?.toFixed(1) || 0}
+                    </div>
+                    <div className="small text-muted">متوسط تقييماتك</div>
+                </div>
+            </div>
+        </div>
+
+        <h6 className="fw-bold mb-3">آخر المشاريع التي قيمتها</h6>
+        {!ratedProjects || ratedProjects.length === 0 ? (
+            <div className="alert alert-light">لم تقم بتقييم أي مشروع بعد.</div>
+        ) : (
+            <div className="list-group list-group-flush">
+                {ratedProjects.slice(0, 5).map((p) => {
+                    // البحث عن تقييم المعلم في هذا المشروع
+                    const userRating = p.ratings?.find(
+                        (r) => r.userId === stats?.userId,
+                    );
+                    return (
+                        <div
+                            key={p._id}
+                            className="list-group-item d-flex justify-content-between align-items-center px-0 border-0 border-bottom"
+                        >
+                            <div>
+                                <div className="fw-medium">{p.title}</div>
+                                <div className="small text-muted">
+                                    بواسطة {p.userId?.name || "غير معروف"}
+                                </div>
+                                {userRating && (
+                                    <div className="d-flex align-items-center mt-1">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <i
+                                                key={star}
+                                                className={`bi ${
+                                                    star <= userRating.value
+                                                        ? "bi-star-fill text-warning"
+                                                        : "bi-star text-muted"
+                                                } ms-1 small`}
+                                            ></i>
+                                        ))}
+                                        {userRating.comment && (
+                                            <span className="text-muted me-2 small">
+                                                "{userRating.comment}"
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <button
+                                className="btn btn-link btn-sm"
+                                onClick={() =>
+                                    navigate?.("project", { id: p._id })
+                                }
+                            >
+                                عرض
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+        )}
+    </div>
+);
 
 const EmptyProjects = ({ isOwner }) => (
     <div className="alert alert-light rounded-3 text-center py-4">

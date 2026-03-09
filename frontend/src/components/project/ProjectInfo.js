@@ -22,6 +22,24 @@ export default function ProjectInfo({ project, navigate }) {
     const avatarColor = colors[colorIndex];
     const ownerInitial = project.userId?.name?.charAt(0) || "U";
 
+    // دالة لعرض النجوم
+    const renderStars = (rating) => {
+        const stars = [];
+        for (let i = 1; i <= 5; i++) {
+            stars.push(
+                <i
+                    key={i}
+                    className={`bi ${
+                        i <= Math.round(rating)
+                            ? "bi-star-fill text-warning"
+                            : "bi-star text-muted"
+                    } ms-1`}
+                ></i>,
+            );
+        }
+        return stars;
+    };
+
     return (
         <>
             <div className="position-relative" style={{ height: 300 }}>
@@ -37,6 +55,24 @@ export default function ProjectInfo({ project, navigate }) {
             </div>
             <div className="card-body p-4">
                 <h2 className="fw-bold mb-3">{project.title}</h2>
+
+                {/* عرض التقييم */}
+                {project.averageRating > 0 ? (
+                    <div className="d-flex align-items-center mb-3">
+                        <div className="ms-2">
+                            {renderStars(project.averageRating)}
+                        </div>
+                        <span className="text-muted small">
+                            ({project.totalRatings} تقييم)
+                        </span>
+                    </div>
+                ) : (
+                    <div className="text-muted small mb-3">
+                        <i className="bi bi-star me-1"></i>
+                        لا توجد تقييمات بعد
+                    </div>
+                )}
+
                 <div className="d-flex align-items-center mb-3">
                     <div
                         className="avatar-circle me-2"

@@ -1,11 +1,11 @@
 import axios from "axios";
 
 const api = axios.create({
-    // baseURL: process.env.REACT_APP_API_BASE || "http://localhost:5000/api",
-    baseURL:
+    baseURL: process.env.REACT_APP_API_BASE || "http://localhost:5000/api",
+    /*  baseURL:
         process.env.REACT_APP_API_BASE ||
         "https://techfolio-kohl.vercel.app/api",
-    withCredentials: true,
+    withCredentials: true, */
 });
 
 api.interceptors.request.use((config) => {
@@ -83,7 +83,7 @@ const projectsAPI = {
 
     // الحصول على مشروع معين
     get: (id) => api.get(`/projects/${id}`),
-
+    getRatedByUser: (userId) => api.get(`/projects/rated-by/${userId}`),
     // إنشاء مشروع جديد
     create: (formData) => api.post("/projects", formData),
 

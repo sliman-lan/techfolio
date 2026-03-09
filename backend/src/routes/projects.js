@@ -86,18 +86,16 @@ router.get("/admin/all", protect, isAdmin, async (req, res) => {
 });
 
 // @route   GET /api/projects/featured
-// @desc    الحصول على المشاريع المميزة
+// @desc    الحصول على المشاريع المميزة (أعلى تقييماً)
 // @access  Public
 router.get("/featured", async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 6;
 
-        const featuredProjects = await Project.find({
-            status: "approved",
-            isFeatured: true,
-        })
+        // جلب المشاريع المقبولة، مرتبة حسب averageRating تنازلياً، ثم عدد التقييمات، ثم الأحدث
+        const featuredProjects = await Project.find({ status: "approved" })
             .populate("userId", "name avatar")
-            .sort({ createdAt: -1 })
+            .sort({ averageRating: -1, totalRatings: -1, createdAt: -1 })
             .limit(limit);
 
         res.json(featuredProjects);
@@ -122,6 +120,31 @@ router.get("/:id", async (req, res) => {
     }
 });
 
+// @route   GET /api/projects/rated-by/:userId
+// @desc    الحصول على المشاريع التي قيمها مستخدم معين
+// @access  Private (يمكن للمعلم نفسه أو المشرف)
+router.get("/rated-by/:userId", protect, async (req, res) => {
+    try {
+        const userId = req.params.userId;
+        // يمكن إضافة صلاحية: فقط المستخدم نفسه أو المشرف
+        if (req.user._id.toString() !== userId && req.user.role !== "admin") {
+            return res.status(403).json({ message: "غير مصرح" });
+        }
+
+        // البحث عن المشاريع التي تحتوي ratings على userId
+        const projects = await Project.find({
+            "ratings.userId": userId,
+            status: "approved", // اختياري: عرض المقبول فقط
+        })
+            .populate("userId", "name avatar")
+            .sort({ createdAt: -1 });
+
+        res.json({ success: true, data: projects });
+    } catch (error) {
+        console.error("❌ Error fetching rated projects:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
 // تعديل مسار إنشاء المشروع لمعالجة أخطاء multer بشكل صحيح
 router.post(
     "/",
@@ -185,15 +208,15 @@ router.put("/:id", protect, upload.array("images", 6), async (req, res) => {
             return res.status(404).json({ message: "المشروع غير موجود" });
         }
 
-        // التحقق من أن المستخدم هو المالك
         if (project.userId.toString() !== req.user._id.toString()) {
             return res
                 .status(403)
                 .json({ message: "غير مصرح لك بتعديل هذا المشروع" });
         }
 
-        // تخزين الصور القديمة لحذفها لاحقاً
+        // تخزين الصور القديمة للمقارنة لاحقًا
         const oldImages = [...project.images];
+        console.log("🖼️ Old images:", oldImages);
 
         // تحديث الحقول النصية
         const allowedUpdates = [
@@ -213,7 +236,6 @@ router.put("/:id", protect, upload.array("images", 6), async (req, res) => {
 
         allowedUpdates.forEach((field) => {
             if (req.body[field] !== undefined) {
-                // معالجة خاصة للمصفوفات
                 if (field === "tags" || field === "technologies") {
                     try {
                         project[field] = JSON.parse(req.body[field]);
@@ -226,36 +248,53 @@ router.put("/:id", protect, upload.array("images", 6), async (req, res) => {
             }
         });
 
-        // معالجة الصور الموجودة (التي يريد المستخدم الاحتفاظ بها)
-        const imagesToKeep = req.body.existingImages
-            ? JSON.parse(req.body.existingImages)
-            : [];
+        // ========== معالجة الصور ==========
+        // إذا تم إرسال existingImages، فهذا يعني أن المستخدم قام بتعديل الصور (حذف بعضها)
+        if (req.body.existingImages !== undefined) {
+            try {
+                const imagesToKeep = JSON.parse(req.body.existingImages);
+                console.log("🖼️ Images to keep:", imagesToKeep);
+                project.images = imagesToKeep; // تعيين الصور المحتفظ بها
+            } catch (e) {
+                console.error("❌ Failed to parse existingImages:", e);
+                return res
+                    .status(400)
+                    .json({ message: "بيانات الصور غير صالحة" });
+            }
+        } else {
+            // إذا لم يتم إرسال existingImages، فهذا يعني أن المستخدم لم يغير الصور، فنحتفظ بالصور القديمة
+            console.log("🖼️ No existingImages sent, keeping old images");
+            // لا تغير project.images
+        }
 
-        // الصور التي سيتم الاحتفاظ بها
-        project.images = imagesToKeep;
+        // إضافة الصور الجديدة (إذا وجدت)
+        const newFiles = req.files || [];
+        console.log("🖼️ New files count:", newFiles.length);
 
-        // إضافة الصور الجديدة
-        if (req.files && req.files.length > 0) {
+        if (newFiles.length > 0) {
             const baseUrl = `${req.protocol}://${req.get("host")}`;
-            const newImages = req.files.map(
+            const newImages = newFiles.map(
                 (f) => `${baseUrl}/uploads/${f.filename}`,
             );
             project.images = [...project.images, ...newImages];
+            console.log("🖼️ New images added:", newImages);
         }
 
-        // حفظ المشروع أولاً للتأكد من نجاح العملية
+        // حفظ المشروع
         const updatedProject = await project.save();
+        console.log("✅ Project saved. Final images:", project.images);
 
-        // بعد حفظ المشروع بنجاح، حذف الصور القديمة التي لم يعد لها وجود
+        // حذف الصور القديمة التي لم تعد موجودة في project.images
         if (oldImages.length > 0) {
             const imagesToDelete = oldImages.filter(
                 (oldImg) =>
                     !project.images.includes(oldImg) &&
-                    !oldImg.includes("default-project"), // لا تحذف الصور الافتراضية
+                    !oldImg.includes("default-avatar"),
             );
 
+            console.log("🗑️ Images to delete:", imagesToDelete);
+
             imagesToDelete.forEach((imgUrl) => {
-                // استخراج اسم الملف من الرابط
                 const filename = imgUrl.split("/").pop();
                 const filePath = path.join(
                     __dirname,
@@ -263,8 +302,6 @@ router.put("/:id", protect, upload.array("images", 6), async (req, res) => {
                     "uploads",
                     filename,
                 );
-
-                // حذف الملف من المجلد
                 if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
                     console.log(`🗑️ تم حذف الصورة: ${filename}`);
@@ -278,6 +315,7 @@ router.put("/:id", protect, upload.array("images", 6), async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
+
 router.delete("/:id", protect, async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);

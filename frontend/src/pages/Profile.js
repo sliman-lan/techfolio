@@ -47,6 +47,14 @@ export default function Profile({ navigate, params }) {
     const [editProjectLoading, setEditProjectLoading] = useState(false);
     const [editProjectError, setEditProjectError] = useState(null);
 
+    // حالات خاصة بالمعلم
+    const [ratedProjects, setRatedProjects] = useState([]);
+    const [teacherStats, setTeacherStats] = useState({
+        totalRatings: 0,
+        averageRating: 0,
+        userId: user?._id,
+    });
+
     // تعيين المتغيرات العامة للتشخيص
     useEffect(() => {
         if (user) {
@@ -109,20 +117,19 @@ export default function Profile({ navigate, params }) {
                 updatedData.isPublic ? "true" : "false",
             );
 
-            // معالجة الصور الموجودة - نرسلها كمصفوفة
+            // معالجة الصور الموجودة
             if (imagesToKeep && imagesToKeep.length > 0) {
-                // يمكن إرسالها كـ JSON string
                 formData.append("existingImages", JSON.stringify(imagesToKeep));
             }
 
             // إضافة الصور الجديدة
             if (updatedData.images && updatedData.images.length > 0) {
                 updatedData.images.forEach((file) => {
-                    formData.append("images", file); // استخدم "images" كما في الإضافة
+                    formData.append("images", file);
                 });
             }
 
-            // إضافة المصفوفات - نرسلها كـ JSON string
+            // إضافة المصفوفات
             if (updatedData.tags && updatedData.tags.length > 0) {
                 formData.append("tags", JSON.stringify(updatedData.tags));
             } else {
@@ -198,6 +205,38 @@ export default function Profile({ navigate, params }) {
         }
     };
 
+    // جلب المشاريع التي قيمها المعلم
+    const fetchRatedProjects = async () => {
+        try {
+            console.log("📥 Fetching rated projects for teacher:", user._id);
+            const res = await projectsAPI.getRatedByUser(user._id);
+            const projects = res.data?.data || res.data || [];
+            console.log("✅ Rated projects received:", projects);
+            setRatedProjects(projects);
+
+            // حساب الإحصائيات مع معالجة أنواع المعرفات
+            let total = 0;
+            let sum = 0;
+            projects.forEach((p) => {
+                const userRating = p.ratings?.find((r) => {
+                    const ratingUserId = r.userId?._id || r.userId;
+                    return ratingUserId?.toString() === user._id.toString();
+                });
+                if (userRating) {
+                    total++;
+                    sum += userRating.value;
+                }
+            });
+            setTeacherStats({
+                totalRatings: total,
+                averageRating: total > 0 ? sum / total : 0,
+                userId: user._id,
+            });
+        } catch (err) {
+            console.error("❌ فشل جلب المشاريع المُقيمة:", err);
+        }
+    };
+
     useEffect(() => {
         if (user) {
             setForm({
@@ -218,6 +257,7 @@ export default function Profile({ navigate, params }) {
         }
     }, [user]);
 
+    // تحميل بيانات الملف الشخصي (للمستخدم الحالي أو مستخدم آخر)
     useEffect(() => {
         let mounted = true;
 
@@ -282,6 +322,13 @@ export default function Profile({ navigate, params }) {
         };
     }, [params, user]);
 
+    // جلب المشاريع المقيمة للمعلم
+    useEffect(() => {
+        if (user?.role === "teacher" && !params?.userId) {
+            fetchRatedProjects();
+        }
+    }, [user, params]);
+
     useEffect(() => {
         if (params?.openAddProject) {
             setShowProjectModal(true);
@@ -294,7 +341,6 @@ export default function Profile({ navigate, params }) {
     const handleDeleteProject = async (projectId) => {
         console.log("🗑️ Delete clicked for project:", projectId);
 
-        // تأكيد الحذف من المستخدم
         if (
             !window.confirm(
                 "هل أنت متأكد من حذف هذا المشروع؟ لا يمكن التراجع عن هذا الإجراء.",
@@ -304,14 +350,11 @@ export default function Profile({ navigate, params }) {
         }
 
         try {
-            // إظهار مؤشر تحميث (اختياري)
             setLoading(true);
-
             console.log("📤 Sending delete request...");
             const res = await projectsAPI.delete(projectId);
             console.log("📥 Delete response:", res);
 
-            // إعادة تحميل المشاريع بعد الحذف
             const ownerId = params?.userId || user?._id;
             const projRes = await projectsAPI.list({ userId: ownerId });
             setUserProjects(projRes.data || []);
@@ -320,8 +363,6 @@ export default function Profile({ navigate, params }) {
         } catch (err) {
             console.error("❌ فشل حذف المشروع:", err);
             console.error("❌ Error response:", err.response?.data);
-
-            // رسالة خطأ مخصصة
             const errorMsg =
                 err.response?.data?.message ||
                 err.message ||
@@ -402,6 +443,8 @@ export default function Profile({ navigate, params }) {
                     isViewingOther={isViewingOther}
                     user={user}
                     userProjects={userProjects}
+                    ratedProjects={ratedProjects}
+                    teacherStats={teacherStats}
                     adminStats={adminStats}
                     onAddProject={() => setShowProjectModal(true)}
                     navigate={navigate}

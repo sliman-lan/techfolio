@@ -29,13 +29,22 @@ const addComment = async (req, res) => {
 
         // إنشاء إشعار لصاحب المشروع
         if (!parentComment) {
-            await Notification.create({
-                userId: project.userId,
-                type: "comment",
-                message: `${req.user.name} علق على مشروعك: ${project.title}`,
-                relatedId: comment._id,
-                relatedType: "Comment",
-            });
+            try {
+                await Notification.create({
+                    userId: project.userId,
+                    type: "comment",
+                    title: "تعليق جديد على مشروعك",
+                    message: `${req.user.name} علق على مشروعك: ${project.title}`,
+                    relatedId: comment._id,
+                    relatedModel: "Comment",
+                    actorId: req.user._id,
+                    isRead: false,
+                });
+                console.log("✅ Notification created for project owner");
+            } catch (notifError) {
+                console.error("❌ Failed to create notification:", notifError);
+                // لا نوقف العملية إذا فشل الإشعار
+            }
         }
 
         // إذا كان رد على تعليق، إشعار لصاحب التعليق الأصلي
@@ -45,13 +54,24 @@ const addComment = async (req, res) => {
                 parent &&
                 parent.userId.toString() !== req.user._id.toString()
             ) {
-                await Notification.create({
-                    userId: parent.userId,
-                    type: "comment",
-                    message: `${req.user.name} رد على تعليقك`,
-                    relatedId: comment._id,
-                    relatedType: "Comment",
-                });
+                try {
+                    await Notification.create({
+                        userId: parent.userId,
+                        type: "comment",
+                        title: "رد على تعليقك",
+                        message: `${req.user.name} رد على تعليقك`,
+                        relatedId: comment._id,
+                        relatedModel: "Comment",
+                        actorId: req.user._id,
+                        isRead: false,
+                    });
+                    console.log("✅ Notification created for comment owner");
+                } catch (notifError) {
+                    console.error(
+                        "❌ Failed to create reply notification:",
+                        notifError,
+                    );
+                }
             }
         }
 
@@ -257,7 +277,6 @@ const deleteComment = async (req, res) => {
         });
     }
 };
-
 // @desc    إضافة أو إزالة إعجاب على تعليق
 // @route   POST /api/comments/:id/like
 // @access  Private
@@ -273,16 +292,23 @@ const toggleLike = async (req, res) => {
         }
 
         const userId = req.user._id;
+
+        // ✅ تحويل جميع الـ ObjectIds إلى نصوص للمقارنة
         const likeIndex = comment.likes.findIndex(
             (id) => id.toString() === userId.toString(),
         );
 
+        let isLiked = false;
+
         if (likeIndex > -1) {
-            // إزالة الإعجاب
+            // ✅ إزالة الإعجاب (Unlike)
             comment.likes.splice(likeIndex, 1);
+            console.log(`👎 User ${userId} unliked comment ${comment._id}`);
         } else {
-            // إضافة إعجاب
+            // ✅ إضافة إعجاب (Like)
             comment.likes.push(userId);
+            isLiked = true;
+            console.log(`👍 User ${userId} liked comment ${comment._id}`);
         }
 
         await comment.save();
@@ -291,11 +317,12 @@ const toggleLike = async (req, res) => {
             success: true,
             data: {
                 likesCount: comment.likes.length,
-                isLiked: likeIndex === -1,
+                isLiked: isLiked,
+                likes: comment.likes, // إرسال قائمة الإعجابات إذا احتاجها الـ frontend
             },
         });
     } catch (error) {
-        console.error("Error in toggleLike:", error);
+        console.error("❌ Error in toggleLike:", error);
         res.status(500).json({
             success: false,
             message: "حدث خطأ في الخادم",
