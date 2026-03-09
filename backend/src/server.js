@@ -68,7 +68,8 @@ app.use((err, req, res, next) => {
 
 // تشغيل الخادم
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`✅ الخادم يعمل على http://localhost:${PORT}`);
-    console.log(`📁 قاعدة البيانات: ${process.env.MONGODB_URI}`);
-});
+// app.listen(PORT, () => {
+//     console.log(`✅ الخادم يعمل على http://localhost:${PORT}`);
+//     console.log(`📁 قاعدة البيانات: ${process.env.MONGODB_URI}`);
+// });
+module.exports = app;  // 
