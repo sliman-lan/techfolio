@@ -1,11 +1,11 @@
 import axios from "axios";
 
 const api = axios.create({
-    baseURL: process.env.REACT_APP_API_BASE || "http://localhost:5000/api",
-    /*  baseURL:
+    // baseURL: process.env.REACT_APP_API_BASE || "http://localhost:5000/api",
+      baseURL:
         process.env.REACT_APP_API_BASE ||
-        "https://techfolio-kohl.vercel.app/api",
-    withCredentials: true, */
+        "https://techfolio-wc1h.onrender.com/",
+    withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
