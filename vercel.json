@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/api/(.*)", "src": "/api/$1" },
+    { "source": "/(.*)", "src": "/frontend/src/$1" }
+  ]
+}
