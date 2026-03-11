@@ -206,57 +206,7 @@ export default function Profile({ navigate, params }) {
     };
 
     // جلب المشاريع التي قيمها المعلم
-    const fetchRatedProjects = async () => {
-        try {
-            console.log("📥 Fetching rated projects for teacher:", user._id);
-            const res = await projectsAPI.getRatedByUser(user._id);
-            const projects = res.data?.data || res.data || [];
-            console.log("✅ Rated projects received:", projects);
-            setRatedProjects(projects);
-
-            // حساب الإحصائيات مع معالجة أنواع المعرفات
-            let total = 0;
-            let sum = 0;
-            projects.forEach((p) => {
-                const userRating = p.ratings?.find((r) => {
-                    const ratingUserId = r.userId?._id || r.userId;
-                    return ratingUserId?.toString() === user._id.toString();
-                });
-                if (userRating) {
-                    total++;
-                    sum += userRating.value;
-                }
-            });
-            setTeacherStats({
-                totalRatings: total,
-                averageRating: total > 0 ? sum / total : 0,
-                userId: user._id,
-            });
-        } catch (err) {
-            console.error("❌ فشل جلب المشاريع المُقيمة:", err);
-        }
-    };
-
-    useEffect(() => {
-        if (user) {
-            setForm({
-                name: user.name || "",
-                bio: user.bio || "",
-                skills: Array.isArray(user.skills)
-                    ? user.skills.join(", ")
-                    : user.skills || "",
-                certifications: Array.isArray(user.certifications)
-                    ? user.certifications
-                    : [],
-                socialLinks: {
-                    github: user.socialLinks?.github || "",
-                    linkedin: user.socialLinks?.linkedin || "",
-                    twitter: user.socialLinks?.twitter || "",
-                },
-            });
-        }
-    }, [user]);
-
+   
     // تحميل بيانات الملف الشخصي (للمستخدم الحالي أو مستخدم آخر)
     useEffect(() => {
         let mounted = true;
