@@ -323,17 +323,41 @@ export default function Profile({ navigate, params }) {
     }, [params, user]);
 
     // جلب المشاريع المقيمة للمعلم
-    useEffect(() => {
-        if (user?.role === "teacher" && !params?.userId) {
-            fetchRatedProjects();
-        }
-    }, [user, params, fetchRatedProjects]);
+  useEffect(() => {
+    if (user?.role === "teacher" && !params?.userId) {
+        const fetchRatedProjects = async () => {
+            try {
+                console.log("📥 Fetching rated projects for teacher:", user._id);
+                const res = await projectsAPI.getRatedByUser(user._id);
+                const projects = res.data?.data || res.data || [];
+                console.log("✅ Rated projects received:", projects);
+                setRatedProjects(projects);
 
-    useEffect(() => {
-        if (params?.openAddProject) {
-            setShowProjectModal(true);
-        }
-    }, [params]);
+                // حساب الإحصائيات مع معالجة أنواع المعرفات
+                let total = 0;
+                let sum = 0;
+                projects.forEach((p) => {
+                    const userRating = p.ratings?.find((r) => {
+                        const ratingUserId = r.userId?._id || r.userId;
+                        return ratingUserId?.toString() === user._id.toString();
+                    });
+                    if (userRating) {
+                        total++;
+                        sum += userRating.value;
+                    }
+                });
+                setTeacherStats({
+                    totalRatings: total,
+                    averageRating: total > 0 ? sum / total : 0,
+                    userId: user._id,
+                });
+            } catch (err) {
+                console.error("❌ فشل جلب المشاريع المُقيمة:", err);
+            }
+        };
+        fetchRatedProjects();
+    }
+}, [user, params]);
 
     const handleChange = (e) =>
         setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
