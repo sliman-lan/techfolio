@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useCallback } from "react";
 import useComments from "../hooks/useComments";
 import ProjectInfo from "../components/project/ProjectInfo";
 import ProjectImages from "../components/project/ProjectImages";
@@ -32,8 +32,8 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
         userRole: user?.role,
     });
 
-   useEffect(() => {
-    const fetchProject = async () => {
+    // تعريف fetchProject باستخدام useCallback
+    const fetchProject = useCallback(async () => {
         setLoading(true);
         console.log("📥 Fetching project:", id, "asAdmin:", asAdmin);
 
@@ -76,10 +76,11 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [id, asAdmin, user]);
 
-    fetchProject();
-}, [id, asAdmin, user]);
+    useEffect(() => {
+        fetchProject();
+    }, [fetchProject]);
 
     // جلب مشاريع مشابهة
     useEffect(() => {
