@@ -323,9 +323,9 @@ export default function Profile({ navigate, params }) {
     }, [params, user]);
 
     // جلب المشاريع المقيمة للمعلم
-  useEffect(() => {
+useEffect(() => {
     if (user?.role === "teacher" && !params?.userId) {
-        const fetchRatedProjects = async () => {
+        (async () => {
             try {
                 console.log("📥 Fetching rated projects for teacher:", user._id);
                 const res = await projectsAPI.getRatedByUser(user._id);
@@ -354,8 +354,7 @@ export default function Profile({ navigate, params }) {
             } catch (err) {
                 console.error("❌ فشل جلب المشاريع المُقيمة:", err);
             }
-        };
-        fetchRatedProjects();
+        })();
     }
 }, [user, params]);
 
