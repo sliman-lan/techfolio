@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(false);
     const [initialized, setInitialized] = useState(false);
 
-    // دالة لتحديث التوكن
+    // تعريف updateToken أولاً (يستخدم في logout)
     const updateToken = useCallback((newToken) => {
         if (newToken) {
             localStorage.setItem("authToken", newToken);
@@ -28,7 +28,14 @@ export function AuthProvider({ children }) {
         setToken(newToken);
     }, []);
 
-    // جلب المستخدم الحالي
+    // تعريف logout (يعتمد على updateToken)
+    const logout = useCallback(() => {
+        updateToken(null);
+        setUser(null);
+        localStorage.removeItem("user");
+    }, [updateToken]);
+
+    // جلب المستخدم الحالي (يعتمد على token و logout)
     const fetchCurrentUser = useCallback(async () => {
         if (!token) return null;
 
@@ -43,7 +50,7 @@ export function AuthProvider({ children }) {
         } catch (error) {
             console.error("❌ فشل جلب بيانات المستخدم:", error);
             if (error.response?.status === 401) {
-                logout();
+                logout(); // الآن logout معرفة مسبقاً
             }
         } finally {
             setLoading(false);
@@ -121,12 +128,6 @@ export function AuthProvider({ children }) {
             setLoading(false);
         }
     };
-
-    const logout = useCallback(() => {
-        updateToken(null);
-        setUser(null);
-        localStorage.removeItem("user");
-    }, [updateToken]);
 
     const updateProfile = async (payload) => {
         setLoading(true);
