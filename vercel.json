@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "src": "/api/(.*)", "destination": "https://techfolio-backend.onrender.com/api/$1" }
+    { "src": "/api/(.*)", "destination": "https://techfolio-wc1h.onrender.com/api/$1" }
   ]
 }
