@@ -32,10 +32,7 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
         userRole: user?.role,
     });
 
-    useEffect(() => {
-        fetchProject();
-    }, [id, asAdmin, fetchProject]);
-
+   useEffect(() => {
     const fetchProject = async () => {
         setLoading(true);
         console.log("📥 Fetching project:", id, "asAdmin:", asAdmin);
@@ -43,13 +40,11 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
         try {
             let res;
 
-            // ✅ إذا كان المشرف وتم تمرير asAdmin = true، استخدم المسار الخاص
             if (asAdmin && user?.role === "admin") {
                 console.log("👑 Admin fetching project with admin route");
                 res = await projectsAPI.getProjectForAdmin(id);
                 setProject(res.data?.data || res.data);
             } else {
-                // المسار العادي للمستخدمين
                 console.log("👤 Regular user fetching project");
                 res = await projectsAPI.get(id);
                 setProject(res.data);
@@ -58,7 +53,6 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
             console.log("✅ Project fetched successfully:", res.data);
             const projectData = res.data?.data || res.data;
 
-            // التحقق من وجود تقييم سابق للمستخدم الحالي إذا كان معلمًا
             if (user?.role === "teacher" && projectData?.ratings) {
                 const existingRating = projectData.ratings.find(
                     (r) => r.userId?._id === user._id || r.userId === user._id,
@@ -70,7 +64,6 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
                 }
             }
 
-            // زيادة عدد المشاهدات (اختياري)
             try {
                 await projectsAPI.incrementViews(id);
             } catch (viewErr) {
@@ -84,6 +77,9 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
             setLoading(false);
         }
     };
+
+    fetchProject();
+}, [id, asAdmin, user]);
 
     // جلب مشاريع مشابهة
     useEffect(() => {
