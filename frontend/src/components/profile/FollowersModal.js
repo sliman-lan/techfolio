@@ -8,38 +8,37 @@ export default function FollowersModal({ userId, type, onClose, navigate }) {
     const [hasMore, setHasMore] = useState(true);
     const [total, setTotal] = useState(0);
 
-   useEffect(() => {
-    const fetchUsers = async () => {
-        setLoading(true);
-        try {
-            const res =
-                type === "followers"
-                    ? await usersAPI.getFollowers(userId, page, 20)
-                    : await usersAPI.getFollowing(userId, page, 20);
+    useEffect(() => {
+        const fetchUsers = async () => {
+            setLoading(true);
+            try {
+                const res =
+                    type === "followers"
+                        ? await usersAPI.getFollowers(userId, page, 20)
+                        : await usersAPI.getFollowing(userId, page, 20);
 
-            const newUsers = res.data?.users || [];
-            const totalCount = res.data?.total || 0;
+                const newUsers = res.data?.users || [];
+                const totalCount = res.data?.total || 0;
 
-            if (page === 1) {
-                setUsers(newUsers);
-            } else {
-                setUsers((prev) => [...prev, ...newUsers]);
+                if (page === 1) {
+                    setUsers(newUsers);
+                } else {
+                    setUsers((prev) => [...prev, ...newUsers]);
+                }
+
+                setTotal(totalCount);
+                // حساب hasMore بدون الاعتماد على users.length
+                const more = newUsers.length === 20 && (page * 20) < totalCount;
+                setHasMore(more);
+            } catch (error) {
+                console.error(`❌ فشل جلب ${type}:`, error);
+            } finally {
+                setLoading(false);
             }
+        };
 
-            setTotal(totalCount);
-            setHasMore(
-                newUsers.length === 20 &&
-                    users.length + newUsers.length < totalCount,
-            );
-        } catch (error) {
-            console.error(`❌ فشل جلب ${type}:`, error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    fetchUsers();
-}, [userId, type, page]);
+        fetchUsers();
+    }, [userId, type, page]);
 
     const loadMore = () => {
         if (!loading && hasMore) {
