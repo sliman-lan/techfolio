@@ -327,7 +327,7 @@ export default function Profile({ navigate, params }) {
         if (user?.role === "teacher" && !params?.userId) {
             fetchRatedProjects();
         }
-    }, [user, params]);
+    }, [user, params, fetchRatedProjects]);
 
     useEffect(() => {
         if (params?.openAddProject) {
