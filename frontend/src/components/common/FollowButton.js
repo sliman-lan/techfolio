@@ -1,101 +1,165 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect } from "react";
 import { usersAPI } from "../../services/api";
-import AuthContext from "../../context/AuthContext";
 
-export default function FollowButton({ userId, username, onFollowChange }) {
-    const { user } = useContext(AuthContext);
-    const [isFollowing, setIsFollowing] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [followersCount, setFollowersCount] = useState(0);
+export default function FollowersModal({ userId, type, onClose, navigate }) {
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [total, setTotal] = useState(0);
 
     useEffect(() => {
-        const checkFollowStatus = async () => {
+        const fetchUsers = async () => {
+            setLoading(true);
             try {
-                const res = await usersAPI.checkFollow(userId);
-                setIsFollowing(res.data?.isFollowing || false);
+                const res =
+                    type === "followers"
+                        ? await usersAPI.getFollowers(userId, page, 20)
+                        : await usersAPI.getFollowing(userId, page, 20);
+
+                const newUsers = res.data?.users || [];
+                const totalCount = res.data?.total || 0;
+
+                // تحديث users مع حساب hasMore بشكل صحيح
+                setUsers((prevUsers) => {
+                    let updatedUsers;
+                    if (page === 1) {
+                        updatedUsers = newUsers;
+                    } else {
+                        updatedUsers = [...prevUsers, ...newUsers];
+                    }
+                    // حساب hasMore بعد تحديث users
+                    const more = newUsers.length === 20 && updatedUsers.length < totalCount;
+                    setHasMore(more);
+                    return updatedUsers;
+                });
+
+                setTotal(totalCount);
             } catch (error) {
-                console.error("❌ فشل التحقق من حالة المتابعة:", error);
+                console.error(`❌ فشل جلب ${type}:`, error);
+            } finally {
+                setLoading(false);
             }
         };
 
-        const fetchFollowersCount = async () => {
-            try {
-                const res = await usersAPI.getFollowers(userId);
-                setFollowersCount(res.data?.total || 0);
-            } catch (error) {
-                console.error("❌ فشل جلب عدد المتابعين:", error);
-            }
-        };
+        fetchUsers();
+    }, [userId, type, page]);
 
-        if (userId) {
-            checkFollowStatus();
-            fetchFollowersCount();
-        }
-    }, [userId]);
-
-    const handleFollow = async () => {
-        setLoading(true);
-        try {
-            if (isFollowing) {
-                await usersAPI.unfollow(userId);
-                setIsFollowing(false);
-                setFollowersCount((prev) => prev - 1);
-            } else {
-                await usersAPI.follow(userId);
-                setIsFollowing(true);
-                setFollowersCount((prev) => prev + 1);
-            }
-
-            if (onFollowChange) {
-                onFollowChange(!isFollowing);
-            }
-        } catch (error) {
-            console.error("❌ فشل عملية المتابعة:", error);
-            alert("حدث خطأ أثناء محاولة المتابعة");
-        } finally {
-            setLoading(false);
+    const loadMore = () => {
+        if (!loading && hasMore) {
+            setPage((prev) => prev + 1);
         }
     };
 
-    // لا تظهر الزر إذا:
-    // 1. لا يوجد مستخدم مسجل
-    // 2. المستخدم يشاهد ملفه الشخصي
-    if (!user || user._id === userId) {
-        return (
-            <div className="d-flex align-items-center gap-3">
-                <div className="text-muted">
-                    <strong>{followersCount}</strong> متابع
-                </div>
-            </div>
-        );
-    }
+    const handleUserClick = (clickedUserId) => {
+        console.log("👤 Clicked user:", clickedUserId);
+        onClose();
+        window.location.href = `/profile?userId=${clickedUserId}`;
+    };
+
+    const getAvatarUrl = (avatar, name) => {
+        if (!avatar || avatar === "default-avatar.png") {
+            return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=4f46e5&color=fff&length=1&font-size=0.4&size=128`;
+        }
+        return avatar;
+    };
 
     return (
-        <div className="d-flex align-items-center gap-3">
-            <button
-                className={`btn ${
-                    isFollowing ? "btn-outline-secondary" : "btn-primary"
-                } rounded-pill px-4 d-flex align-items-center gap-2 follow-button`}
-                onClick={handleFollow}
-                disabled={loading}
-                style={{ transition: "all 0.3s ease" }}
+        <div
+            className="modal show d-block"
+            style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 9999 }}
+            onClick={onClose}
+        >
+            <div
+                className="modal-dialog modal-dialog-centered"
+                onClick={(e) => e.stopPropagation()}
             >
-                {loading ? (
-                    <span className="spinner-border spinner-border-sm" />
-                ) : isFollowing ? (
-                    <>
-                        <i className="bi bi-person-check"></i>
-                        <span>أتابع</span>
-                    </>
-                ) : (
-                    <>
-                        <i className="bi bi-person-plus"></i>
-                        <span>متابعة</span>
-                    </>
-                )}
-            </button>
-            <div className="text-muted">
-                <strong>{followersCount}</strong> متابع
+                <div className="modal-content rounded-4">
+                    <div className="modal-header">
+                        <h5 className="modal-title">
+                            {type === "followers" ? "المتابعون" : "المتابَعون"}
+                            {total > 0 && (
+                                <span className="text-muted me-2 small">
+                                    ({total})
+                                </span>
+                            )}
+                        </h5>
+                        <button
+                            type="button"
+                            className="btn-close"
+                            onClick={onClose}
+                        ></button>
+                    </div>
+
+                    <div
+                        className="modal-body"
+                        style={{ maxHeight: "400px", overflowY: "auto" }}
+                    >
+                        {users.length === 0 && !loading ? (
+                            <p className="text-center text-muted py-4">
+                                {type === "followers"
+                                    ? "لا يوجد متابعون بعد"
+                                    : "لا يتابع أحداً بعد"}
+                            </p>
+                        ) : (
+                            <div className="list-group list-group-flush">
+                                {users.map((user) => (
+                                    <div
+                                        key={user._id}
+                                        className="list-group-item d-flex align-items-center gap-3 border-0 py-3"
+                                        style={{ cursor: "pointer" }}
+                                        onClick={() => handleUserClick(user._id)}
+                                    >
+                                        <img
+                                            src={getAvatarUrl(
+                                                user.avatar,
+                                                user.name,
+                                            )}
+                                            alt={user.name}
+                                            className="rounded-circle"
+                                            style={{
+                                                width: 50,
+                                                height: 50,
+                                                objectFit: "cover",
+                                            }}
+                                        />
+                                        <div className="flex-grow-1">
+                                            <h6 className="mb-1 fw-bold">
+                                                {user.name}
+                                            </h6>
+                                            <small className="text-muted d-block">
+                                                {user.bio?.substring(0, 60) ||
+                                                    "لا يوجد نبذة"}
+                                                {user.bio?.length > 60
+                                                    ? "..."
+                                                    : ""}
+                                            </small>
+                                        </div>
+                                        <i className="bi bi-chevron-left text-muted"></i>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {loading && (
+                            <div className="text-center py-3">
+                                <div className="spinner-border spinner-border-sm text-primary" />
+                                <span className="ms-2 text-muted">
+                                    جاري التحميل...
+                                </span>
+                            </div>
+                        )}
+
+                        {hasMore && !loading && users.length > 0 && (
+                            <button
+                                className="btn btn-link w-100 mt-2 text-primary"
+                                onClick={loadMore}
+                            >
+                                تحميل المزيد
+                            </button>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
