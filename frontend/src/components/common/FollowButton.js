@@ -10,29 +10,29 @@ export default function FollowButton({ userId, username, onFollowChange }) {
 
     // التحقق من حالة المتابعة
     useEffect(() => {
+        const checkFollowStatus = async () => {
+            try {
+                const res = await usersAPI.checkFollow(userId);
+                setIsFollowing(res.data?.isFollowing || false);
+            } catch (error) {
+                console.error("❌ فشل التحقق من حالة المتابعة:", error);
+            }
+        };
+
+        const fetchFollowersCount = async () => {
+            try {
+                const res = await usersAPI.getFollowers(userId);
+                setFollowersCount(res.data?.total || 0);
+            } catch (error) {
+                console.error("❌ فشل جلب عدد المتابعين:", error);
+            }
+        };
+
         if (userId) {
             checkFollowStatus();
             fetchFollowersCount();
         }
     }, [userId]);
-
-    const checkFollowStatus = async () => {
-        try {
-            const res = await usersAPI.checkFollow(userId);
-            setIsFollowing(res.data?.isFollowing || false);
-        } catch (error) {
-            console.error("❌ فشل التحقق من حالة المتابعة:", error);
-        }
-    };
-
-    const fetchFollowersCount = async () => {
-        try {
-            const res = await usersAPI.getFollowers(userId);
-            setFollowersCount(res.data?.total || 0);
-        } catch (error) {
-            console.error("❌ فشل جلب عدد المتابعين:", error);
-        }
-    };
 
     const handleFollow = async () => {
         setLoading(true);
