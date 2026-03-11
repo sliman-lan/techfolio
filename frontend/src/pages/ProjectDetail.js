@@ -34,7 +34,7 @@ export default function ProjectDetail({ id, navigate, asAdmin = false }) {
 
     useEffect(() => {
         fetchProject();
-    }, [id, asAdmin]);
+    }, [id, asAdmin, fetchProject]);
 
     const fetchProject = async () => {
         setLoading(true);
