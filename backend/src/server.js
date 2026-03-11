@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const fs = require("fs");
+
 // تحميل متغيرات البيئة
 dotenv.config();
 
@@ -13,8 +14,32 @@ connectDB();
 // إنشاء تطبيق Express
 const app = express();
 
-// Middleware
-app.use(cors());
+// إعدادات CORS المتقدمة
+const allowedOrigins = [
+  'http://localhost:3000',           // للتطوير المحلي
+  'https://techfolio-project.vercel.app/', // ضع رابط الفرونت إند الفعلي من Vercel هنا
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // السماح للطلبات التي لا تحمل origin (مثل Postman أو تطبيقات الخادم)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('غير مسموح بالوصول عبر CORS'));
+    }
+  },
+  credentials: true, // ⬅️ ضروري للسماح بإرسال التوكن والكوكيز
+}));
+
+// إذا أردت تجربة سريعة (السماح لأي origin مع credentials) استبدل ما سبق بهذا:
+// app.use(cors({
+//   origin: true,  // يعكس origin الطالب ديناميكيًا
+//   credentials: true,
+// }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -32,9 +57,9 @@ app.use("/uploads", express.static(uploadsDir));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api/projects", require("./routes/projects"));
-app.use("/api/comments", require("./routes/comment")); // ✅ هذا السطر المضاف
-app.use("/api/follow", require("./routes/follow")); // ✅ هذا السطر المضاف (إذا كان موجوداً)
-app.use("/api/notifications", require("./routes/notification")); // ✅ هذا السطر المضاف (إذا كان موجوداً)
+app.use("/api/comments", require("./routes/comment"));
+app.use("/api/follow", require("./routes/follow"));
+app.use("/api/notifications", require("./routes/notification"));
 
 // صفحة الترحيب
 app.get("/", (req, res) => {
@@ -45,7 +70,7 @@ app.get("/", (req, res) => {
             auth: "/api/auth",
             users: "/api/users",
             projects: "/api/projects",
-            comments: "/api/comments", // ✅ تحديث قائمة endpoints
+            comments: "/api/comments",
             follow: "/api/follow",
             notifications: "/api/notifications",
         },
@@ -68,8 +93,7 @@ app.use((err, req, res, next) => {
 
 // تشغيل الخادم
 const PORT = process.env.PORT || 3000;
-app.listen(PORT,'0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ الخادم يعمل على http://localhost:${PORT}`);
     console.log(`📁 قاعدة البيانات: ${process.env.MONGODB_URI}`);
 });
-
