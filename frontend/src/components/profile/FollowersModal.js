@@ -10,7 +10,7 @@ export default function FollowersModal({ userId, type, onClose, navigate }) {
 
     useEffect(() => {
         fetchUsers();
-    }, [userId, type, page]);
+    }, [userId, type, page, fetchUsers]);
 
     const fetchUsers = async () => {
         setLoading(true);
