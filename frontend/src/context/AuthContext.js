@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
             setLoading(false);
             setInitialized(true);
         }
-    }, [token]);
+    }, [token, logout]);
 
     // تهيئة عند تحميل التطبيق
     useEffect(() => {
