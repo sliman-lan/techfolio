@@ -8,10 +8,7 @@ export default function FollowersModal({ userId, type, onClose, navigate }) {
     const [hasMore, setHasMore] = useState(true);
     const [total, setTotal] = useState(0);
 
-    useEffect(() => {
-        fetchUsers();
-    }, [userId, type, page, fetchUsers]);
-
+   useEffect(() => {
     const fetchUsers = async () => {
         setLoading(true);
         try {
@@ -40,6 +37,9 @@ export default function FollowersModal({ userId, type, onClose, navigate }) {
             setLoading(false);
         }
     };
+
+    fetchUsers();
+}, [userId, type, page]);
 
     const loadMore = () => {
         if (!loading && hasMore) {
