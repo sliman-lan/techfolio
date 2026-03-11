@@ -8,7 +8,6 @@ export default function FollowButton({ userId, username, onFollowChange }) {
     const [loading, setLoading] = useState(false);
     const [followersCount, setFollowersCount] = useState(0);
 
-    // التحقق من حالة المتابعة
     useEffect(() => {
         const checkFollowStatus = async () => {
             try {
