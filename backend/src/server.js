@@ -21,24 +21,12 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    // السماح للطلبات التي لا تحمل origin (مثل Postman أو تطبيقات الخادم)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('غير مسموح بالوصول عبر CORS'));
-    }
-  },
-  credentials: true, // ⬅️ ضروري للسماح بإرسال التوكن والكوكيز
-}));
 
-// إذا أردت تجربة سريعة (السماح لأي origin مع credentials) استبدل ما سبق بهذا:
-// app.use(cors({
-//   origin: true,  // يعكس origin الطالب ديناميكيًا
-//   credentials: true,
-// }));
+إذا أردت تجربة سريعة (السماح لأي origin مع credentials) استبدل ما سبق بهذا:
+app.use(cors({
+  origin: true,  // يعكس origin الطالب ديناميكيًا
+  credentials: true,
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
