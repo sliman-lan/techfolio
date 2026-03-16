@@ -17,7 +17,7 @@ const app = express();
 // إعدادات CORS المتقدمة
 const allowedOrigins = [
   'http://localhost:3000',           // للتطوير المحلي
-  'https://techfolio-project.vercel.app/', // ضع رابط الفرونت إند الفعلي من Vercel هنا
+  'https://techfolio-project-e7im2namj-slimans-projects-6f0f14b8.vercel.app/', // ضع رابط الفرونت إند الفعلي من Vercel هنا
 ];
 
 app.use(cors({
