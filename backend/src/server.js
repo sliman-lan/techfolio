@@ -21,9 +21,6 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-
-إذا أردت تجربة سريعة (السماح لأي origin مع credentials) استبدل ما سبق بهذا:
-app.use(cors({
   origin: true,  // يعكس origin الطالب ديناميكيًا
   credentials: true,
 }));
